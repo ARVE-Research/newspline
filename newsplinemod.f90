@@ -1,4 +1,4 @@
-module newsplinemodfinal
+module newsplinemod
 
 
 use nrtype
@@ -3823,4 +3823,4 @@ end subroutine findloc
 
 
 
-end module newsplinemodfinal
+end module newsplinemod

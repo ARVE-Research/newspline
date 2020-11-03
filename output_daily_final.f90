@@ -11,6 +11,7 @@ integer(I4B), dimension(53) :: date
 integer(I4B), dimension(36) :: nk
 
 real(sp), dimension(:), allocatable :: daydata
+
 integer(I4B) :: summ, i, j, n
 
 character(6) :: header
@@ -43,15 +44,15 @@ daydata = 0.
 
 !---
 
-call newspline_all(temp_C(1:36), nk, daydata, prec=2)
+call newspline_all(temp_C(1:36), nk, daydata)
 
 !---
 
  do i = 1, summ
+
     print *, daydata(i)
+
  end do
-
-
 
 
 end program output_daily_final
