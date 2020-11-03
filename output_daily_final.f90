@@ -2,18 +2,15 @@ program output_daily_final
 
 use nrtype
 use nrutil
-use mcsplinemod
-use rmsmoothmod
-use newsplinemodfinal
+use newsplinemod
 
 implicit none
 
 real(sp)    , dimension(53) :: temp_F, temp_C
 integer(I4B), dimension(53) :: date
-real(sp)    , dimension(2)  :: bcond
 integer(I4B), dimension(36) :: nk
 
-real(sp), dimension(:), allocatable :: daydata_ns, daydata_mc, daydata_rm
+real(sp), dimension(:), allocatable :: daydata
 integer(I4B) :: summ, i, j, n
 
 character(6) :: header
@@ -38,47 +35,23 @@ nk = [31,28,31,30,31,30,31,31,30,31,30,31,  &
 
 !---
 
-nk = nk * 1
-
-!---
-
-bcond(1) = temp_C(1)
-bcond(2) = temp_C(36)
-
 summ = sum(nk)
-allocate(daydata_mc(summ))
-allocate(daydata_ns(summ))
-allocate(daydata_rm(summ))
 
-daydata_mc = 0.
-daydata_ns = 0.
-daydata_rm = 0.
+allocate(daydata(summ))
+
+daydata = 0.
 
 !---
 
-call mcspline(temp_C(1:36), nk, daydata_mc)
-
-call newspline(temp_C(1:36), nk, daydata_ns)
-
-call rmsmooth(temp_C(1:36), nk, bcond, daydata_rm)
+call newspline_all(temp_C(1:36), nk, daydata, prec=2)
 
 !---
 
  do i = 1, summ
-   print *, daydata_mc(i)
+    print *, daydata(i)
  end do
 
-!---
 
- do i = 1, summ
-    print *, daydata_ns(i)
- end do
-
-!---
-
- do i = 1, summ
-   print *, daydata_rm(i)
- end do
 
 
 end program output_daily_final
