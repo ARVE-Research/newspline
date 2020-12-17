@@ -9,7 +9,27 @@ integer, parameter :: i4 = int32
 integer, parameter :: sp = real32
 integer, parameter :: dp = real64
 
-contains
+! provide a one-sentence description of each of the subroutines below 
+
+public  :: newspline_all            ! wrapper subroutine with all optional arguments
+private :: newspline
+private :: newspline_recur
+private :: newspline_bound_recur
+private :: newspline_pbound_recur
+private :: newspline_bound
+private :: newspline_pbound
+private :: newspline_bound_all
+private :: monocheck
+private :: days_even
+private :: days_odd
+private :: days_osc_even
+private :: days_osc_odd
+private :: mono_adjust
+private :: ludcmp       ! FLAG CHECK FOR OPEN SOURCE
+private :: lubksb       ! FLAG CHECK FOR OPEN SOURCE
+private :: sprsin_sp    ! FLAG CHECK FOR OPEN SOURCE
+private :: sprsax_sp    ! FLAG CHECK FOR OPEN SOURCE
+private :: findloc      
 
 ! COMPOSITE WRAPPER SUBROUTINE : newspline_all
 !---
@@ -35,8 +55,10 @@ contains
 ! newspline_bound_all(monthdata, nk, daydata, llim, ulim, plim)
 !---
 
+contains
+
 !-------------------------------------------------------------------------------
-! Wrapper subroutine with all optional arguments
+! wrapper subroutine with all optional arguments
 
 subroutine newspline_all(monthdata,nk,daydata,llim,ulim,plim,prec)
 
@@ -127,240 +149,6 @@ if(present(prec)) then
 end if
 
 end subroutine newspline_all
-
-!-------------------------------------------------------------------------------
-! Newspline routine put in do-while loop to limit interpolated daily values by an error boundary
-
-subroutine newspline_recur(monthdata,nk,daydata,error_bound)
-
-implicit none
-
-real(sp),    dimension(:), intent(in)  :: monthdata
-integer(i4), dimension(:), intent(in)  :: nk
-real(sp),    dimension(:), intent(out) :: daydata
-real(sp),                  intent(in)  :: error_bound
-
-! Local variables for controlling the error of interpolated daily data points
-
-real(sp), dimension(:), allocatable :: month_copy
-real(sp), dimension(:), allocatable :: mean_error
-
-real(sp)    :: mean
-real(sp)    :: max_err
-integer(i4) :: len
-integer(i4) :: n_iter
-integer(i4) :: i,n
-
-!------
-
-len = size(monthdata)
-
-n_iter = 0
-
-allocate(month_copy(len))
-allocate(mean_error(len))
-
-month_copy = monthdata ! Copy of monthdata to allow error adjustment
-
-mean_error = 9999.
-
-max_err = 9999.
-
-! Generate daily data
-do while (max_err >= error_bound .and. n_iter < 10) ! Maximum of 10 iterations allowed
-
-  call newspline(month_copy, nk, daydata)
-
-  !---
-
-  n = 1
-
-  do i = 1, len
-
-    mean = sum(daydata(n:(n+nk(i)-1))) / nk(i)
-
-    mean_error(i) = mean - monthdata(i)
-
-    n = n + nk(i)
-
-  end do
-
-  !---
-  ! Subtract the error onto monthcopy for the next iteration
-
-  do i = 1, len
-
-    month_copy(i) = month_copy(i) - mean_error(i)
-
-  end do
-
-  !---
-  ! Calculate the maximum absolute error in mean estimation
-
-  max_err = maxval(abs(mean_error))
-
-  n_iter = n_iter + 1
-
-end do
-
-end subroutine newspline_recur
-
-!-------------------------------------------------------------------------------
-! newspline (w/ minmax bound) routine put in do-while loop to limit interpolated daily values by an error boundary
-
-subroutine newspline_bound_recur(monthdata,nk,daydata,llim,ulim,error_bound)
-
-implicit none
-
-real(sp),    dimension(:), intent(in)  :: monthdata
-integer(i4), dimension(:), intent(in)  :: nk
-real(sp),    dimension(:), intent(out) :: daydata
-real(sp),                  intent(in)  :: llim
-real(sp),                  intent(in)  :: ulim
-real(sp),                  intent(in)  :: error_bound
-
-! Local variables for controlling the error of interpolated daily data points
-
-real(sp), dimension(:), allocatable :: month_copy
-real(sp), dimension(:), allocatable :: mean_error
-
-real(sp)    :: mean
-real(sp)    :: max_err
-integer(i4) :: len
-integer(i4) :: n_iter
-integer(i4) :: i, n
-
-!------
-
-len = size(monthdata)
-
-n_iter = 0
-
-allocate(month_copy(len))
-allocate(mean_error(len))
-
-month_copy = monthdata ! Copy of monthdata to allow error adjustment
-
-mean_error = 9999.
-
-max_err = 9999.
-
-! Generate daily data
-do while (max_err >= error_bound .and. n_iter < 10) ! Maximum of 10 iterations allowed
-
-  call newspline_bound(month_copy, nk, daydata, llim, ulim)
-
-  !---
-
-  n = 1
-
-  do i = 1, len
-
-    mean = sum(daydata(n:(n+nk(i)-1))) / nk(i)
-
-    mean_error(i) = mean - monthdata(i)
-
-    n = n + nk(i)
-
-  end do
-
-  !---
-  ! Subtract the error onto monthcopy for the next iteration
-
-  do i = 1, len
-
-    month_copy(i) = month_copy(i) - mean_error(i)
-
-  end do
-
-  !---
-  ! Calculate the maximum absolute error in mean estimation
-
-  max_err = maxval(abs(mean_error))
-
-  n_iter = n_iter + 1
-
-end do
-
-end subroutine newspline_bound_recur
-
-!-------------------------------------------------------------------------------
-! Newspline (w/ minmax bound) routine put in do-while loop to limit interpolated daily values by an error boundary
-
-subroutine newspline_pbound_recur(monthdata,nk,daydata,plim,error_bound)
-
-implicit none
-
-real(sp),    dimension(:), intent(in)  :: monthdata
-integer(i4), dimension(:), intent(in)  :: nk
-real(sp),    dimension(:), intent(out) :: daydata
-real(sp),                  intent(in)  :: plim
-real(sp),                  intent(in)  :: error_bound
-
-! Local variables for controlling the error of interpolated daily data points
-
-real(sp), dimension(:), allocatable :: month_copy
-real(sp), dimension(:), allocatable :: mean_error
-
-real(sp)    :: mean
-real(sp)    :: max_err
-integer(i4) :: len
-integer(i4) :: n_iter
-integer(i4) :: i,n
-
-!------
-
-len = size(monthdata)
-
-n_iter = 0
-
-allocate(month_copy(len))
-allocate(mean_error(len))
-
-month_copy = monthdata ! Copy of monthdata to allow error adjustment
-
-mean_error = 9999.
-
-max_err = 9999.
-
-! Generate daily data
-do while (max_err >= error_bound .and. n_iter < 10) ! Maximum of 10 iterations allowed
-
-  call newspline_pbound(month_copy, nk, daydata, plim)
-
-  !---
-
-  n = 1
-
-  do i = 1, len
-
-    mean = sum(daydata(n:(n+nk(i)-1))) / nk(i)
-
-    mean_error(i) = mean - monthdata(i)
-
-    n = n + nk(i)
-
-  end do
-
-  !---
-  ! Subtract the error onto monthcopy for the next iteration
-
-  do i = 1, len
-
-    month_copy(i) = month_copy(i) - mean_error(i)
-
-  end do
-
-  !---
-  ! Calculate the maximum absolute error in mean estimation
-
-  max_err = maxval(abs(mean_error))
-
-  n_iter = n_iter + 1
-
-end do
-
-end subroutine newspline_pbound_recur
 
 !-------------------------------------------------------------------------------
 
@@ -709,6 +497,240 @@ do i = 1, len !outer loop start, for all monthly intervals N
 end do !end of outer loop
 
 end subroutine newspline
+
+!-------------------------------------------------------------------------------
+! newspline routine put in do-while loop to limit interpolated daily values by an error boundary
+
+subroutine newspline_recur(monthdata,nk,daydata,error_bound)
+
+implicit none
+
+real(sp),    dimension(:), intent(in)  :: monthdata
+integer(i4), dimension(:), intent(in)  :: nk
+real(sp),    dimension(:), intent(out) :: daydata
+real(sp),                  intent(in)  :: error_bound
+
+! Local variables for controlling the error of interpolated daily data points
+
+real(sp), dimension(:), allocatable :: month_copy
+real(sp), dimension(:), allocatable :: mean_error
+
+real(sp)    :: mean
+real(sp)    :: max_err
+integer(i4) :: len
+integer(i4) :: n_iter
+integer(i4) :: i,n
+
+!------
+
+len = size(monthdata)
+
+n_iter = 0
+
+allocate(month_copy(len))
+allocate(mean_error(len))
+
+month_copy = monthdata ! Copy of monthdata to allow error adjustment
+
+mean_error = 9999.
+
+max_err = 9999.
+
+! Generate daily data
+do while (max_err >= error_bound .and. n_iter < 10) ! Maximum of 10 iterations allowed
+
+  call newspline(month_copy, nk, daydata)
+
+  !---
+
+  n = 1
+
+  do i = 1, len
+
+    mean = sum(daydata(n:(n+nk(i)-1))) / nk(i)
+
+    mean_error(i) = mean - monthdata(i)
+
+    n = n + nk(i)
+
+  end do
+
+  !---
+  ! Subtract the error onto monthcopy for the next iteration
+
+  do i = 1, len
+
+    month_copy(i) = month_copy(i) - mean_error(i)
+
+  end do
+
+  !---
+  ! Calculate the maximum absolute error in mean estimation
+
+  max_err = maxval(abs(mean_error))
+
+  n_iter = n_iter + 1
+
+end do
+
+end subroutine newspline_recur
+
+!-------------------------------------------------------------------------------
+! newspline (w/ minmax bound) routine put in do-while loop to limit interpolated daily values by an error boundary
+
+subroutine newspline_bound_recur(monthdata,nk,daydata,llim,ulim,error_bound)
+
+implicit none
+
+real(sp),    dimension(:), intent(in)  :: monthdata
+integer(i4), dimension(:), intent(in)  :: nk
+real(sp),    dimension(:), intent(out) :: daydata
+real(sp),                  intent(in)  :: llim
+real(sp),                  intent(in)  :: ulim
+real(sp),                  intent(in)  :: error_bound
+
+! Local variables for controlling the error of interpolated daily data points
+
+real(sp), dimension(:), allocatable :: month_copy
+real(sp), dimension(:), allocatable :: mean_error
+
+real(sp)    :: mean
+real(sp)    :: max_err
+integer(i4) :: len
+integer(i4) :: n_iter
+integer(i4) :: i, n
+
+!------
+
+len = size(monthdata)
+
+n_iter = 0
+
+allocate(month_copy(len))
+allocate(mean_error(len))
+
+month_copy = monthdata ! Copy of monthdata to allow error adjustment
+
+mean_error = 9999.
+
+max_err = 9999.
+
+! Generate daily data
+do while (max_err >= error_bound .and. n_iter < 10) ! Maximum of 10 iterations allowed
+
+  call newspline_bound(month_copy, nk, daydata, llim, ulim)
+
+  !---
+
+  n = 1
+
+  do i = 1, len
+
+    mean = sum(daydata(n:(n+nk(i)-1))) / nk(i)
+
+    mean_error(i) = mean - monthdata(i)
+
+    n = n + nk(i)
+
+  end do
+
+  !---
+  ! Subtract the error onto monthcopy for the next iteration
+
+  do i = 1, len
+
+    month_copy(i) = month_copy(i) - mean_error(i)
+
+  end do
+
+  !---
+  ! Calculate the maximum absolute error in mean estimation
+
+  max_err = maxval(abs(mean_error))
+
+  n_iter = n_iter + 1
+
+end do
+
+end subroutine newspline_bound_recur
+
+!-------------------------------------------------------------------------------
+! newspline (w/ minmax bound) routine put in do-while loop to limit interpolated daily values by an error boundary
+
+subroutine newspline_pbound_recur(monthdata,nk,daydata,plim,error_bound)
+
+implicit none
+
+real(sp),    dimension(:), intent(in)  :: monthdata
+integer(i4), dimension(:), intent(in)  :: nk
+real(sp),    dimension(:), intent(out) :: daydata
+real(sp),                  intent(in)  :: plim
+real(sp),                  intent(in)  :: error_bound
+
+! Local variables for controlling the error of interpolated daily data points
+
+real(sp), dimension(:), allocatable :: month_copy
+real(sp), dimension(:), allocatable :: mean_error
+
+real(sp)    :: mean
+real(sp)    :: max_err
+integer(i4) :: len
+integer(i4) :: n_iter
+integer(i4) :: i,n
+
+!------
+
+len = size(monthdata)
+
+n_iter = 0
+
+allocate(month_copy(len))
+allocate(mean_error(len))
+
+month_copy = monthdata ! Copy of monthdata to allow error adjustment
+
+mean_error = 9999.
+
+max_err = 9999.
+
+! Generate daily data
+do while (max_err >= error_bound .and. n_iter < 10) ! Maximum of 10 iterations allowed
+
+  call newspline_pbound(month_copy, nk, daydata, plim)
+
+  !---
+
+  n = 1
+
+  do i = 1, len
+
+    mean = sum(daydata(n:(n+nk(i)-1))) / nk(i)
+
+    mean_error(i) = mean - monthdata(i)
+
+    n = n + nk(i)
+
+  end do
+
+  !---
+  ! Subtract the error onto monthcopy for the next iteration
+
+  do i = 1, len
+
+    month_copy(i) = month_copy(i) - mean_error(i)
+
+  end do
+
+  !---
+  ! Calculate the maximum absolute error in mean estimation
+
+  max_err = maxval(abs(mean_error))
+
+  n_iter = n_iter + 1
+
+end do
+
+end subroutine newspline_pbound_recur
 
 !-------------------------------------------------------------------------------
 subroutine newspline_bound(monthdata,nk,daydata,llim,ulim)
@@ -1436,6 +1458,7 @@ end do !end of outer loop
 end subroutine newspline_bound
 
 !-------------------------------------------------------------------------------
+
 subroutine newspline_pbound(monthdata,nk,daydata,plim)
 
 implicit none
@@ -2170,6 +2193,7 @@ end do !end of outer loop
 end subroutine newspline_pbound
 
 !-------------------------------------------------------------------------------
+
 subroutine newspline_bound_all(monthdata,nk,daydata,llim,ulim,plim)
 
 implicit none
@@ -3007,6 +3031,7 @@ end do
 end subroutine monocheck
 
 !-------------------------------------------------------------------------------
+
 subroutine days_even(nk,y_val,m_val,daydata)
 
 implicit none
@@ -3299,6 +3324,7 @@ end do
 end subroutine days_osc_even
 
 !-------------------------------------------------------------------------------
+
 subroutine days_osc_odd(nk,root_days,root,y_val,m_val,daydata)
 
 implicit none
@@ -3469,6 +3495,7 @@ end do
 end subroutine days_osc_odd
 
 !-------------------------------------------------------------------------------
+
 subroutine mono_adjust(monthdata, all_cont)
 
 implicit none
@@ -3799,7 +3826,8 @@ sa%jcol = pack(spread(arth(1,1,n),1,n),mask)
 end subroutine sprsin_sp
 
 !-------------------------------------------------------------------------------
-subroutine sprsax_sp(sa,x,b)
+
+subroutine sprsax_sp(sa,x,b)       ! FLAG CHECK FOR OPEN SOURCE
 
 implicit none
 
