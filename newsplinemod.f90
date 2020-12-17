@@ -1,35 +1,29 @@
 module newsplinemod
 
-use iso_fortran_env
+use parametersmod,  only : i4, sp
+use utilitiesmod,   only : matsol, findloc
 
 implicit none
 
-integer, parameter :: i4 = int32
-integer, parameter :: sp = real32
 
-! NEED TO CITE/DOCUMENT ALL INCLUSION OF OPEN-SOURCE CODE THAT IS NOT ORIGINAL
+public  :: newspline_all            ! Wrapper subroutine with all optional arguments
+private :: newspline                ! Subroutine of newspline base function with no optional arguments
+private :: newspline_bound          ! Subroutine with absolute upper and lower limit options
+private :: newspline_pbound         ! Subroutine with percentage limit option
+private :: newspline_bound_all      ! Subroutine with both absolute and percentage limit options
+private :: monocheck                ! Monotonicity check subroutine for each control point
+private :: mono_adjust              ! Adjustment subroutine for un-monotonic control points
+private :: days_even                ! Subroutine to calculate Hermite cubic values with even number of partitions
+private :: days_odd                 ! Subroutine to calculate Hermite cubic values with odd number of partitions
+private :: days_osc_even            ! Subroutine to calculate Hermite cubic values with even number of partitions in intervals adjusted for oscillation
+private :: days_osc_odd             ! Subroutine to calculate Hermite cubic values with odd number of partitions in intervals adjusted for oscillation
 
-! provide a one-sentence description of each of the subroutines below 
 
-public  :: newspline_all            ! wrapper subroutine with all optional arguments
-private :: newspline
-private :: newspline_recur
-private :: newspline_bound_recur
-private :: newspline_pbound_recur
-private :: newspline_bound
-private :: newspline_pbound
-private :: newspline_bound_all
-private :: monocheck
-private :: days_even
-private :: days_odd
-private :: days_osc_even
-private :: days_osc_odd
-private :: mono_adjust
-private :: ludcmp       ! FLAG CHECK FOR OPEN SOURCE
-private :: lubksb       ! FLAG CHECK FOR OPEN SOURCE
-private :: sprsin_sp    ! FLAG CHECK FOR OPEN SOURCE
-private :: sprsax_sp    ! FLAG CHECK FOR OPEN SOURCE
-private :: findloc      ! FLAG CHECK FOR OPEN SOURCE
+contains
+
+!-------------------------------------------------------------------------------
+! wrapper subroutine with all optional arguments
+subroutine newspline_all(monthdata,nk,daydata,llim,ulim,plim,prec)
 
 ! COMPOSITE WRAPPER SUBROUTINE : newspline_all
 !---
@@ -46,30 +40,16 @@ private :: findloc      ! FLAG CHECK FOR OPEN SOURCE
 !---
 ! All options can be applied simultaneously.
 
-
-! Other constituent subroutines
-!---
-! newspline(monthdata, nk, daydata)
-! newspline_bound(monthdata, nk, daydata, llim, ulim)
-! newspline_pbound(monthdata, nk, daydata, plim)
-! newspline_bound_all(monthdata, nk, daydata, llim, ulim, plim)
-!---
-
-contains
-
-!-------------------------------------------------------------------------------
-! wrapper subroutine with all optional arguments
-
-subroutine newspline_all(monthdata,nk,daydata,llim,ulim,plim,prec)
-
 implicit none
-real(sp), dimension(:),    intent(in)  :: monthdata
+
+real(sp),    dimension(:), intent(in)  :: monthdata
 integer(i4), dimension(:), intent(in)  :: nk
-real(sp), dimension(:),    intent(out) :: daydata
-real(sp), optional,        intent(in)  :: llim
-real(sp), optional,        intent(in)  :: ulim
-real(sp), optional,        intent(in)  :: plim
-integer(i4), optional,     intent(in)  :: prec
+real(sp),    dimension(:), intent(out) :: daydata
+
+real(sp),    optional, intent(in)  :: llim
+real(sp),    optional, intent(in)  :: ulim
+real(sp),    optional, intent(in)  :: plim
+integer(i4), optional, intent(in)  :: prec
 
 integer(i4) :: precision
 integer(i4), dimension(:), allocatable :: int_daydata
@@ -150,58 +130,48 @@ end if
 
 end subroutine newspline_all
 
+
 !-------------------------------------------------------------------------------
 
 subroutine newspline(monthdata,nk,daydata)
 
 implicit none
 
-real(sp), dimension(:), intent(in)  :: monthdata
-integer,  dimension(:), intent(in)  :: nk
-real(sp), dimension(:), intent(out) :: daydata
+real(sp),    dimension(:), intent(in)  :: monthdata
+integer(i4), dimension(:), intent(in)  :: nk
+real(sp),    dimension(:), intent(out) :: daydata
 
 ! Local variables for first mid-control points
-
 real(sp), dimension(:), allocatable :: fmc
 real(sp), dimension(:), allocatable :: d
 real(sp), dimension(:), allocatable :: m
 
 ! Local variables for wall control points
-
 real(sp), dimension(:), allocatable :: swc
 
 ! Local variables for linear system of mid control adjustments
-
-real(sp),    dimension(:,:), allocatable :: mat
-integer(i4), dimension(:),   allocatable :: indx
-real(sp),    dimension(:),   allocatable :: solution
-real(sp),    dimension(:),   allocatable :: all_solution
-real(sp)                                 :: dd
+real(sp), dimension(:,:), allocatable :: mat
+real(sp), dimension(:),   allocatable :: solution
+real(sp), dimension(:),   allocatable :: all_solution
 
 ! Final vector of all control points
-
 real(sp), dimension(:), allocatable :: all_cont
 
 ! Local variables for generating daily values
-
 real(sp), dimension(:), allocatable :: d_cont
 real(sp), dimension(:), allocatable :: m_cont
 
-integer(i4) :: len_cont
-integer(i4) :: k
-
 ! Hermite cubic and quartic spline basis functions
-
 real(sp) :: H_00, H_10, H_01, H_11
 real(sp) :: G_00, G_10, G_01, G_11
 real(sp) :: u,z
 
-integer(i4) :: len
-integer(i4) :: i,j,n
+integer(i4) :: len, len_cont
+integer(i4) :: i, j, k, n
+
 
 !----------------------------------------------------------------
-! Start of the spline routine
-
+! Start of the newspline routine
 len = size(monthdata)
 
 allocate(fmc(len+2))
@@ -210,7 +180,6 @@ allocate(m(len+2))
 
 !------
 ! Define first mid-control point as equal to original monthdata
-
 fmc(1) = monthdata(1)
 fmc(2:(len+1)) = monthdata(1:len)
 fmc(len+2) = monthdata(len)
@@ -231,7 +200,6 @@ do i = 2, (len+1)
 
   !---
   ! Monotonic adjustment to slope
-
   if(d(i-1) > 0 .and. d(i) < 0) then
 
     m(i) = 0
@@ -259,14 +227,9 @@ do i = 1, (len+1)
 
 end do
 
-!---
-! Ensure smooth monotonic interpolation between control points
-
-!call monocheck(d,m)
 
 !------
 ! Calculate wall control based on interception of Hermite functions
-
 allocate(swc(len+1))
 
 u = 0.5
@@ -282,11 +245,10 @@ do i = 1, (len+1)
 
 end do
 
+
 !------
 ! Generate matrix for final adjustments to mid-control points
-
 allocate(mat(len,len))
-allocate(indx(len))
 allocate(solution(len))
 
 !---
@@ -303,7 +265,6 @@ G_11 = (u**3) * (3.*u - 4.) / 12.
 mat = 0.
 
 ! Consider two "buffer midpoints" outside of first and last interval
-
 mat(1,1) = 0.5 * G_10 + G_01 + G_00 - 0.5 * G_11 + 1.
 mat(1,2) = 0.5 * G_11
 
@@ -338,10 +299,8 @@ do i = 2, (len-1)
 end do
 
 ! Solve linear system to get final mid control points
+call matsol(mat, solution)
 
-call ludcmp(mat,indx,dd)
-
-call lubksb(mat,indx,solution)
 
 !------
 ! Compile wall control with newly adjusted mid control points (all_cont)
@@ -399,12 +358,6 @@ do i = 2, (len_cont-3)
   end if
 
 end do
-
-
-!---
-! Ensure smooth monotonic interpolation between control points
-
-!call monocheck(d_cont,m_cont)
 
 
 !------
@@ -498,239 +451,6 @@ end do !end of outer loop
 
 end subroutine newspline
 
-!-------------------------------------------------------------------------------
-! newspline routine put in do-while loop to limit interpolated daily values by an error boundary
-
-subroutine newspline_recur(monthdata,nk,daydata,error_bound)
-
-implicit none
-
-real(sp),    dimension(:), intent(in)  :: monthdata
-integer(i4), dimension(:), intent(in)  :: nk
-real(sp),    dimension(:), intent(out) :: daydata
-real(sp),                  intent(in)  :: error_bound
-
-! Local variables for controlling the error of interpolated daily data points
-
-real(sp), dimension(:), allocatable :: month_copy
-real(sp), dimension(:), allocatable :: mean_error
-
-real(sp)    :: mean
-real(sp)    :: max_err
-integer(i4) :: len
-integer(i4) :: n_iter
-integer(i4) :: i,n
-
-!------
-
-len = size(monthdata)
-
-n_iter = 0
-
-allocate(month_copy(len))
-allocate(mean_error(len))
-
-month_copy = monthdata ! Copy of monthdata to allow error adjustment
-
-mean_error = 9999.
-
-max_err = 9999.
-
-! Generate daily data
-do while (max_err >= error_bound .and. n_iter < 10) ! Maximum of 10 iterations allowed
-
-  call newspline(month_copy, nk, daydata)
-
-  !---
-
-  n = 1
-
-  do i = 1, len
-
-    mean = sum(daydata(n:(n+nk(i)-1))) / nk(i)
-
-    mean_error(i) = mean - monthdata(i)
-
-    n = n + nk(i)
-
-  end do
-
-  !---
-  ! Subtract the error onto monthcopy for the next iteration
-
-  do i = 1, len
-
-    month_copy(i) = month_copy(i) - mean_error(i)
-
-  end do
-
-  !---
-  ! Calculate the maximum absolute error in mean estimation
-
-  max_err = maxval(abs(mean_error))
-
-  n_iter = n_iter + 1
-
-end do
-
-end subroutine newspline_recur
-
-!-------------------------------------------------------------------------------
-! newspline (w/ minmax bound) routine put in do-while loop to limit interpolated daily values by an error boundary
-
-subroutine newspline_bound_recur(monthdata,nk,daydata,llim,ulim,error_bound)
-
-implicit none
-
-real(sp),    dimension(:), intent(in)  :: monthdata
-integer(i4), dimension(:), intent(in)  :: nk
-real(sp),    dimension(:), intent(out) :: daydata
-real(sp),                  intent(in)  :: llim
-real(sp),                  intent(in)  :: ulim
-real(sp),                  intent(in)  :: error_bound
-
-! Local variables for controlling the error of interpolated daily data points
-
-real(sp), dimension(:), allocatable :: month_copy
-real(sp), dimension(:), allocatable :: mean_error
-
-real(sp)    :: mean
-real(sp)    :: max_err
-integer(i4) :: len
-integer(i4) :: n_iter
-integer(i4) :: i, n
-
-!------
-
-len = size(monthdata)
-
-n_iter = 0
-
-allocate(month_copy(len))
-allocate(mean_error(len))
-
-month_copy = monthdata ! Copy of monthdata to allow error adjustment
-
-mean_error = 9999.
-
-max_err = 9999.
-
-! Generate daily data
-do while (max_err >= error_bound .and. n_iter < 10) ! Maximum of 10 iterations allowed
-
-  call newspline_bound(month_copy, nk, daydata, llim, ulim)
-
-  !---
-
-  n = 1
-
-  do i = 1, len
-
-    mean = sum(daydata(n:(n+nk(i)-1))) / nk(i)
-
-    mean_error(i) = mean - monthdata(i)
-
-    n = n + nk(i)
-
-  end do
-
-  !---
-  ! Subtract the error onto monthcopy for the next iteration
-
-  do i = 1, len
-
-    month_copy(i) = month_copy(i) - mean_error(i)
-
-  end do
-
-  !---
-  ! Calculate the maximum absolute error in mean estimation
-
-  max_err = maxval(abs(mean_error))
-
-  n_iter = n_iter + 1
-
-end do
-
-end subroutine newspline_bound_recur
-
-!-------------------------------------------------------------------------------
-! newspline (w/ minmax bound) routine put in do-while loop to limit interpolated daily values by an error boundary
-
-subroutine newspline_pbound_recur(monthdata,nk,daydata,plim,error_bound)
-
-implicit none
-
-real(sp),    dimension(:), intent(in)  :: monthdata
-integer(i4), dimension(:), intent(in)  :: nk
-real(sp),    dimension(:), intent(out) :: daydata
-real(sp),                  intent(in)  :: plim
-real(sp),                  intent(in)  :: error_bound
-
-! Local variables for controlling the error of interpolated daily data points
-
-real(sp), dimension(:), allocatable :: month_copy
-real(sp), dimension(:), allocatable :: mean_error
-
-real(sp)    :: mean
-real(sp)    :: max_err
-integer(i4) :: len
-integer(i4) :: n_iter
-integer(i4) :: i,n
-
-!------
-
-len = size(monthdata)
-
-n_iter = 0
-
-allocate(month_copy(len))
-allocate(mean_error(len))
-
-month_copy = monthdata ! Copy of monthdata to allow error adjustment
-
-mean_error = 9999.
-
-max_err = 9999.
-
-! Generate daily data
-do while (max_err >= error_bound .and. n_iter < 10) ! Maximum of 10 iterations allowed
-
-  call newspline_pbound(month_copy, nk, daydata, plim)
-
-  !---
-
-  n = 1
-
-  do i = 1, len
-
-    mean = sum(daydata(n:(n+nk(i)-1))) / nk(i)
-
-    mean_error(i) = mean - monthdata(i)
-
-    n = n + nk(i)
-
-  end do
-
-  !---
-  ! Subtract the error onto monthcopy for the next iteration
-
-  do i = 1, len
-
-    month_copy(i) = month_copy(i) - mean_error(i)
-
-  end do
-
-  !---
-  ! Calculate the maximum absolute error in mean estimation
-
-  max_err = maxval(abs(mean_error))
-
-  n_iter = n_iter + 1
-
-end do
-
-end subroutine newspline_pbound_recur
 
 !-------------------------------------------------------------------------------
 subroutine newspline_bound(monthdata,nk,daydata,llim,ulim)
@@ -744,42 +464,34 @@ real(sp),                   intent(in)  :: llim
 real(sp),                   intent(in)  :: ulim
 
 ! Local variables for first mid control points
-
 real(sp), dimension(:), allocatable :: fmc
 real(sp), dimension(:), allocatable :: d
 real(sp), dimension(:), allocatable :: m
 
 ! Local variables for wall control points
-
 real(sp), dimension(:), allocatable :: swc
 
 ! Local variables for linear system of mid control adjustments
-
-real(sp),    dimension(:,:), allocatable :: mat
-integer(i4), dimension(:),   allocatable :: indx
-real(sp),    dimension(:),   allocatable :: solution
-real(sp),    dimension(:),   allocatable :: all_solution
-real(sp)                                 :: dd
+real(sp), dimension(:,:), allocatable :: mat
+real(sp), dimension(:),   allocatable :: solution
+real(sp), dimension(:),   allocatable :: all_solution
 
 integer(i4) :: len
 integer(i4) :: i, j, n
 
 ! Final vector of all control points
-
 real(sp), dimension(:), allocatable :: all_cont
 
 ! Hermite cubic quartic spline basis functions
-
 real(sp) :: H_00
 real(sp) :: H_01
 real(sp) :: H_10
 real(sp) :: H_11
 
-real(sp) :: u, z
+real(sp)    :: u, z
 integer(i4) :: l
 
 ! Local variables for generating daily values after minmax bound adjustment of all_cont
-
 real(sp), dimension(:), allocatable :: d_new
 real(sp), dimension(:), allocatable :: m_new
 
@@ -788,7 +500,6 @@ integer(i4) :: slpe_l, slpe_r
 integer(i4) :: k
 
 ! Local variables for max and min bound adjustments
-
 integer(i4), dimension(:), allocatable :: d_orig
 logical,     dimension(:), allocatable :: osc_check
 real(sp),    dimension(:), allocatable :: c2
@@ -796,7 +507,6 @@ real(sp),    dimension(:), allocatable :: root
 integer(i4), dimension(:), allocatable :: root_days
 
 ! Local variables for calculating root of quadratic approximation
-
 real(sp)    :: diff_yi1
 real(sp)    :: diff_yi
 real(sp)    :: top, bot
@@ -879,15 +589,8 @@ do i = 1, (len+1)
 end do
 
 
-!---
-! Ensure smooth monotonic interpolation between control points
-
-! call monocheck(d,m)
-
-
 !------
 ! Calculate "second" wall control based on interception of Hermite functions
-
 allocate(swc(len+1))
 
 u = 0.5
@@ -907,7 +610,6 @@ end do
 !------
 ! Compile the NxN linear matrix to adjust mid-control points
 allocate(mat(len,len))
-allocate(indx(len))
 allocate(solution(len))
 
 !---
@@ -960,9 +662,7 @@ end do
 
 
 ! Solve linear system to get final mid control points
-call ludcmp(mat, indx, dd)
-
-call lubksb(mat, indx, solution)
+call matsol(mat, solution)
 
 
 !------
@@ -1120,8 +820,6 @@ do i = 2, (len-1)
 
       root_adj = 9999.
 
-      !---
-
         l = 0
         do while (root_adj > 0.)
 
@@ -1135,10 +833,6 @@ do i = 2, (len-1)
 
       !---
 
-      !root(i) = u - (2. / nk(i)) !+ (0.5 / nk(i))
-
-      !root_days(i) = (u - (3. / nk(i))) / (2. / nk(i))
-
       root_days(i) = l - 1
 
       !---
@@ -1148,8 +842,6 @@ do i = 2, (len-1)
       u = 0. !1. / (real(nk(i)))
 
       root_adj = 9999.
-
-      !---
 
         l = 0
         do while (root_adj > 0.)
@@ -1163,10 +855,6 @@ do i = 2, (len-1)
         end do
 
       !---
-
-      !root(i) = u - (2. / nk(i)) !+ (0.5 / nk(i))
-
-      !root_days(i) = (u - (4. / nk(i))) / (2. / nk(i))
 
       root_days(i) = l - 1
 
@@ -1285,7 +973,6 @@ x_new(nn) = kk
 y_new(nn) = all_cont(mm)
 
 
-
 !------
 ! Construct the spline for daily values based on all_cont
 len_new = size(x_new)
@@ -1307,7 +994,6 @@ do i = 2, (len_new-1)
 
   !---
   ! Monotonic adjustment to slope
-
   if(d_new(i-1) > 0 .and. d_new(i) < 0) then
 
     m_new(i) = 0
@@ -1339,12 +1025,9 @@ end do
 
 !------
 ! Reassign quadratic approximation slopes and original slopes to adjusted intervals
-
 do i = 2, (len-1)
 
   if (osc_check(i) ) then
-
-    !slpe_l = findloc(x_new, (real(2*i)-root(i)), dim = 1) ! Find index in x_new = 2*i ('which' function in R)
 
     call findloc(x_new, (real(2*i)-root(i)), slpe_l)
 
@@ -1362,8 +1045,6 @@ do i = 2, (len-1)
 
     m_new(slpe_r+1) = ((all_cont((2*i)+2) - all_cont(2*i+1)) / 1. + (all_cont(2*i+1) - all_cont(2*i)) / 1.) / 2.
 
-    !---
-
   end if
 
 end do
@@ -1371,7 +1052,6 @@ end do
 
 !---
 ! Ensure smooth monotonic interpolation between control points
-
 call monocheck(d_new, m_new)
 
 
@@ -1384,11 +1064,7 @@ do i = 1, len !outer loop start, for all monthly intervals N
 
   if (.not.osc_check(i)) then ! For intervals that did not required adjustment
 
-    !---
-
     if(mod(nk(i),2) == 0) then !seperate into even or odd months, starting with EVEN
-
-      !---
 
       l = n + nk(i) - 1
 
@@ -1396,11 +1072,7 @@ do i = 1, len !outer loop start, for all monthly intervals N
 
       n = n + nk(i)
 
-      !---
-
     else ! if odd months (or odd number of smaller time step)
-
-      !---
 
       l = n + nk(i) - 1
 
@@ -1408,21 +1080,13 @@ do i = 1, len !outer loop start, for all monthly intervals N
 
       n = n + nk(i)
 
-      !---
-
     end if
 
     k = k + 2
 
-    !---
-
   else if (osc_check(i) ) then ! for intervals adjusted by minmax bound
 
-    !---
-
     if(mod(nk(i),2) == 0) then !seperate into even or odd months, starting with EVEN
-
-      !---
 
       l = n + nk(i) - 1
 
@@ -1430,11 +1094,7 @@ do i = 1, len !outer loop start, for all monthly intervals N
 
       n = n + nk(i)
 
-      !---
-
     else ! if odd months (or odd number of smaller time step)
-
-      !---
 
       l = n + nk(i) - 1
 
@@ -1442,13 +1102,9 @@ do i = 1, len !outer loop start, for all monthly intervals N
 
       n = n + nk(i)
 
-      !---
-
     end if
 
     k = k + 4
-
-    !---
 
   end if
 
@@ -1457,42 +1113,34 @@ end do !end of outer loop
 
 end subroutine newspline_bound
 
-!-------------------------------------------------------------------------------
 
+!-------------------------------------------------------------------------------
 subroutine newspline_pbound(monthdata,nk,daydata,plim)
 
 implicit none
 
-! I/O variables
-
 real(sp),    dimension(:), intent(in)  :: monthdata
 integer(i4), dimension(:), intent(in)  :: nk
 real(sp),    dimension(:), intent(out) :: daydata
-real(sp),                  intent(in)  :: plim !taken in as 0-100%
+real(sp),                  intent(in)  :: plim      !taken in as 0-100%
 
 ! Local variables for first mid control points
-
 real(sp), dimension(:), allocatable :: fmc
 real(sp), dimension(:), allocatable :: d
 real(sp), dimension(:), allocatable :: m
 
 ! Local variables for second wall control points
-
 real(sp), dimension(:), allocatable :: swc
 
 ! Local variables for linear system of mid control adjustments
-
-real(sp),    dimension(:,:), allocatable :: mat
-integer(i4), dimension(:),   allocatable :: indx
-real(sp),    dimension(:),   allocatable :: solution
-real(sp),    dimension(:),   allocatable :: all_solution
-real(sp)                                 :: dd
+real(sp), dimension(:,:), allocatable :: mat
+real(sp), dimension(:),   allocatable :: solution
+real(sp), dimension(:),   allocatable :: all_solution
 
 integer(i4) :: len
 integer(i4) :: i, j, n
 
 ! Hermite cubic spline basis functions
-
 real(sp)     :: H_00
 real(sp)     :: H_01
 real(sp)     :: H_10
@@ -1502,11 +1150,9 @@ real(sp)     :: u,z
 integer(i4) :: l
 
 ! Final vector of all control points
-
 real(sp), dimension(:), allocatable :: all_cont
 
 ! Local variables for generating daily values after minmax bound adjustment of all_cont
-
 real(sp), dimension(:), allocatable :: d_new
 real(sp), dimension(:), allocatable :: m_new
 
@@ -1515,7 +1161,6 @@ integer(i4) :: slpe_l, slpe_r
 integer(i4) :: k
 
 ! Local variables for max and min bound adjustments
-
 integer(i4), dimension(:), allocatable :: d_orig
 logical,     dimension(:), allocatable :: osc_check
 real(sp),    dimension(:), allocatable :: c2
@@ -1524,7 +1169,6 @@ integer(i4), dimension(:), allocatable :: root_days
 real(sp)                               :: perc
 
 ! Local variables for calculating root of quadratic approximation
-
 real(sp)     :: diff_yi1
 real(sp)     :: diff_yi
 real(sp)     :: top, bot
@@ -1546,7 +1190,6 @@ real(sp) :: area_total
 real(sp) :: area_int
 
 ! Local variables for x_new and y_new
-
 real(sp), dimension(:), allocatable :: x_new
 real(sp), dimension(:), allocatable :: y_new
 
@@ -1558,7 +1201,6 @@ integer(i4)  :: nn, mm
 !------------------
 
 ! Start of the spline routine
-
 len = size(monthdata)
 
 allocate(fmc(len+2))
@@ -1614,10 +1256,6 @@ do i = 1, (len+1)
 
 end do
 
-!---
-! Ensure smooth monotonic interpolation between control points
-
-call monocheck(d,m)
 
 !------
 ! Calculate "second" wall control based on interception of Hermite functions
@@ -1641,7 +1279,6 @@ end do
 !------
 ! Compile the NxN linear matrix to adjust mid-control points
 allocate(mat(len,len))
-allocate(indx(len))
 allocate(solution(len))
 
 !---
@@ -1693,10 +1330,8 @@ do i = 2, (len-1)
 end do
 
 ! Solve linear system to get final mid control points
+call matsol(mat,solution)
 
-call ludcmp(mat, indx, dd)
-
-call lubksb(mat, indx, solution)
 
 !------
 ! Compile "second" wall control with newly adjusted mid control points (all_cont)
@@ -1724,11 +1359,13 @@ end do
 
 all_cont(size(all_cont)) = swc(size(swc))
 
+
 !------------------
 ! PART 2: Adjust monotonicty using the tridiagonal equation
 !------------------
 
 call mono_adjust(monthdata, all_cont)
+
 
 !------------------
 ! PART 3: Adjustment to maximum and minimum bound
@@ -1746,9 +1383,9 @@ c2 = -9999.
 root = -9999.
 root_days = -9999
 
+
 !------
 ! Assign -1 for negative slope, 1 for postive and 0 for turning point
-
 do i = 2, (len-1)
 
   if ((monthdata(i+1) - monthdata(i)) < 0) then
@@ -1781,8 +1418,6 @@ end do
 perc = plim / 100.
 
 do i = 2, (len-1)
-
-  !j = 2 * i
 
   if (d_orig(i) == 0 .and. monthdata(i) > 0) then
 
@@ -1839,8 +1474,6 @@ do i = 2, (len-1)
 
     end if
 
-    !---
-
   end if
 
 end do
@@ -1889,19 +1522,12 @@ do i = 2, (len-1)
 
         end do
 
-      !---
-
-      !root(i) = u - (2. / nk(i)) !+ (0.5 / nk(i))
-
-      !root_days(i) = (u - (3. / nk(i))) / (2. / nk(i))
-
       root_days(i) = l - 1
 
-      !---
 
     else if (mod(nk(i),2) /= 0) then ! ODD month partitions
 
-      u = 0. !1. / (real(nk(i)))
+      u = 0.
 
       root_adj = 9999.
 
@@ -1918,15 +1544,7 @@ do i = 2, (len-1)
 
         end do
 
-      !---
-
-      !root(i) = u - (2. / nk(i)) !+ (0.5 / nk(i))
-
-      !root_days(i) = (u - (4. / nk(i))) / (2. / nk(i))
-
       root_days(i) = l - 1
-
-      !---
 
     end if
 
@@ -1946,7 +1564,6 @@ do i = 1, (len-1)
   if(osc_check(i) ) then
 
     !--- Construct fourth degree Hermite at u = 1 (integral [0,1])
-
     del = 1. - root(i)
 
     u = 1.
@@ -1957,19 +1574,16 @@ do i = 1, (len-1)
     G_11 = (u**3) * (3.*u - 4.) / 12.
 
     !--- Assign local control points
-
     yi   = all_cont((2*i)-1)
     yi1  = monthdata(i)
     y2i  = monthdata(i)
     y2i1 = all_cont((2*i)+1)
 
     !--- Assign local slope
-
     mi   = ((yi - all_cont((2*i)-2)) / 1. + (all_cont(2*i) - yi) / 1.) / 2.
     m2i1 = ((all_cont((2*i)+2) - y2i1) / 1. + (y2i1 - all_cont(2*i)) / 1.) / 2.
 
     !--- Calculate new area approximation based on Hermite intergral
-
     area_total = 2. * del * monthdata(i)
 
     top = (G_00 * yi) + (G_10 * del * mi) + (G_01 * yi1) + (G_00 * y2i) + (G_01 * y2i1) + (G_11 * del * m2i1)
@@ -1978,7 +1592,6 @@ do i = 1, (len-1)
     area_int = (area_total - del * (top + yi + y2i)) / bot
 
     !--- Re-assign c2 as the integral-estimated value
-
     c2(i) = (3. * area_int) / (4 * root(i))
 
   end if
@@ -1988,7 +1601,6 @@ end do
 
 !------
 ! Generate x_new and y_new series that contains the extra quadratic adjusted segments
-
 allocate(x_new((2*len)+2+count))
 allocate(y_new((2*len)+2+count))
 
@@ -2040,9 +1652,9 @@ end do
 x_new(nn) = kk
 y_new(nn) = all_cont(mm)
 
+
 !------
 ! Construct the spline for daily values based on all_cont
-
 len_new = size(x_new)
 
 allocate(d_new(len_new-1))
@@ -2062,7 +1674,6 @@ do i = 2, (len_new-1)
 
   !---
   ! Monotonic adjustment to slope
-
   if(d_new(i-1) > 0 .and. d_new(i) < 0) then
 
     m_new(i) = 0
@@ -2093,7 +1704,6 @@ end do
 
 !------
 ! Reassign quadratic approximation slopes and original slopes to adjusted intervals
-
 do i = 2, (len-1)
 
   if (osc_check(i) ) then
@@ -2124,8 +1734,8 @@ end do
 
 !---
 ! Ensure smooth monotonic interpolation between control points
-
 call monocheck(d_new, m_new)
+
 
 !------
 !Assign the daily value based on sequence
@@ -2140,19 +1750,13 @@ do i = 1, len !outer loop start, for all monthly intervals N
 
     if(mod(nk(i),2) == 0) then !seperate into even or odd months, starting with EVEN
 
-      !---
-
       l = n + nk(i) - 1
 
       call days_even(nk(i), y_new(k:k+2), m_new(k:k+2), daydata(n:l))
 
       n = n + nk(i)
 
-      !---
-
     else ! if odd months (or odd number of smaller time step)
-
-      !---
 
       l = n + nk(i) - 1
 
@@ -2160,21 +1764,13 @@ do i = 1, len !outer loop start, for all monthly intervals N
 
       n = n + nk(i)
 
-      !---
-
     end if
 
     k = k + 2
 
-    !---
-
   else if (osc_check(i) ) then ! for intervals adjusted by minmax bound
 
-    !---
-
     if(mod(nk(i),2) == 0) then !seperate into even or odd months, starting with EVEN
-
-      !---
 
       l = n + nk(i) - 1
 
@@ -2182,11 +1778,7 @@ do i = 1, len !outer loop start, for all monthly intervals N
 
       n = n + nk(i)
 
-      !---
-
     else ! if odd months (or odd number of smaller time step)
-
-      !---
 
       l = n + nk(i) - 1
 
@@ -2194,23 +1786,18 @@ do i = 1, len !outer loop start, for all monthly intervals N
 
       n = n + nk(i)
 
-      !---
-
     end if
 
     k = k + 4
-
-    !---
 
   end if
 
 end do !end of outer loop
 
-
 end subroutine newspline_pbound
 
-!-------------------------------------------------------------------------------
 
+!-------------------------------------------------------------------------------
 subroutine newspline_bound_all(monthdata,nk,daydata,llim,ulim,plim)
 
 implicit none
@@ -2223,42 +1810,34 @@ real(sp),                  intent(in)  :: ulim
 real(sp),                  intent(in)  :: plim ! taken in a 0-100
 
 ! Local variables for first mid control points
-
 real(sp), dimension(:), allocatable :: fmc
 real(sp), dimension(:), allocatable :: d
 real(sp), dimension(:), allocatable :: m
 
 ! Local variables for wall control points
-
 real(sp), dimension(:), allocatable :: swc
 
 ! Local variables for linear system of mid control adjustments
-
 real(sp),    dimension(:,:), allocatable :: mat
-integer(i4), dimension(:),   allocatable :: indx
 real(sp),    dimension(:),   allocatable :: solution
 real(sp),    dimension(:),   allocatable :: all_solution
-real(sp)                                 :: dd
 
 integer(i4) :: len
 integer(i4) :: i,j,n
 
 ! Final vector of all control points
-
 real(sp), dimension(:), allocatable :: all_cont
 
 ! Hermite cubic quartic spline basis functions
-
 real(sp) :: H_00
 real(sp) :: H_01
-real(sp) :: H_10 
+real(sp) :: H_10
 real(sp) :: H_11
 real(sp) :: u,z
 
 integer(i4) :: l
 
 ! Local variables for generating daily values after minmax bound adjustment of all_cont
-
 real(sp), dimension(:), allocatable :: d_new
 real(sp), dimension(:), allocatable :: m_new
 
@@ -2267,7 +1846,6 @@ integer(i4) :: slpe_l, slpe_r
 integer(i4) :: k
 
 ! Local variables for max and min bound adjustments
-
 integer(i4), dimension(:), allocatable :: d_orig
 logical,     dimension(:), allocatable :: osc_check
 real(sp),    dimension(:), allocatable :: c2
@@ -2276,7 +1854,6 @@ integer(i4), dimension(:), allocatable :: root_days
 real(sp)                               :: perc
 
 ! Local variables for calculating root of quadratic approximation
-
 real(sp)    :: diff_yi1
 real(sp)    :: diff_yi
 real(sp)    :: top, bot
@@ -2297,19 +1874,18 @@ real(sp) :: area_total
 real(sp) :: area_int
 
 ! Local variables for x_new and y_new
-
 real(sp), dimension(:), allocatable :: x_new
 real(sp), dimension(:), allocatable :: y_new
 
 real(sp)    :: kk
 integer(i4) :: nn, mm
 
+
 !------------------
 ! PART 1: Determine all wall and mid control points
 !------------------
 
 ! Start of the spline routine
-
 len = size(monthdata)
 
 allocate(fmc(len+2))
@@ -2318,7 +1894,6 @@ allocate(m(len+2))
 
 !------
 ! Define first mid-control point as equal to original monthdata
-
 fmc(1) = monthdata(1)
 fmc(2:(len+1)) = monthdata(1:len)
 fmc(len+2) = monthdata(len)
@@ -2339,7 +1914,6 @@ do i = 2, (len+1)
 
   !---
   ! Monotonic adjustment to slope
-
   if(d(i-1) > 0 .and. d(i) < 0) then
 
     m(i) = 0
@@ -2367,14 +1941,9 @@ do i = 1, (len+1)
 
 end do
 
-!---
-! Ensure smooth monotonic interpolation between control points
-
-! call monocheck(d,m)
 
 !------
 ! Calculate "second" wall control based on interception of Hermite functions
-
 allocate(swc(len+1))
 
 u = 0.5
@@ -2390,11 +1959,10 @@ do i = 1, (len+1)
 
 end do
 
+
 !------
 ! Compile the NxN linear matrix to adjust mid-control points
-
 allocate(mat(len,len))
-allocate(indx(len))
 allocate(solution(len))
 
 !---
@@ -2411,7 +1979,6 @@ G_11 = (u**3) * (3*u - 4.) / 12.
 mat = 0.
 
 ! Consider two "midpoints" outside of first and last interval
-
 mat(1,1) = 0.5 * G_10 + G_01 + G_00 - 0.5 * G_11 + 1.
 mat(1,2) = 0.5 * G_11
 
@@ -2445,10 +2012,8 @@ do i = 2, (len-1)
 end do
 
 ! Solve linear system to get final mid control points
+call matsol(mat, solution)
 
-call ludcmp(mat, indx, dd)
-
-call lubksb(mat, indx, solution)
 
 !------
 ! Compile "second" wall control with newly adjusted mid control points (all_cont)
@@ -2476,11 +2041,13 @@ end do
 
 all_cont(size(all_cont)) = swc(size(swc))
 
+
 !------------------
 ! PART 2: Adjust monotonicty using the tridiagonal equation
 !------------------
 
 call mono_adjust(monthdata, all_cont)
+
 
 !------------------
 ! PART 3: Adjustment to maximum and minimum bound
@@ -2500,7 +2067,6 @@ root_days = -9999
 
 !------
 ! Assign -1 for negative slope, 1 for postive and 0 for turning point
-
 do i = 2, (len-1)
 
   if ((monthdata(i+1) - monthdata(i)) < 0) then
@@ -2529,7 +2095,6 @@ end do
 
 !------
 ! Assign TRUE if oscillation of turning point exceeds the predetermined threshold
-
 perc = plim / 100.
 
 do i = 2, (len-1)
@@ -2558,7 +2123,6 @@ end do
 
 !------
 ! Calculate the amount of adjustment required and insert into the c2 variable
-
 do i = 2, (len-1)
 
   if (osc_check(i)  .and. monthdata(i) > 0) then
@@ -2613,9 +2177,9 @@ do i = 2, (len-1)
 
 end do
 
+
 !------
 ! Calculate the root deviation based on c2 and triangular approximation
-
 count = 0 ! Count the number of extra Hermite spline segments required
 
 do i = 2, (len-1)
@@ -2657,12 +2221,6 @@ do i = 2, (len-1)
 
         end do
 
-      !---
-
-      !root(i) = u - (2. / nk(i)) !+ (0.5 / nk(i))
-
-      !root_days(i) = (u - (3. / nk(i))) / (2. / nk(i))
-
       root_days(i) = l - 1
 
       !---
@@ -2672,8 +2230,6 @@ do i = 2, (len-1)
       u = 0. !1. / (real(nk(i)))
 
       root_adj = 9999.
-
-      !---
 
         l = 0
         do while (root_adj > 0.)
@@ -2686,19 +2242,9 @@ do i = 2, (len-1)
 
         end do
 
-      !---
-
-      !root(i) = u - (2. / nk(i)) !+ (0.5 / nk(i))
-
-      !root_days(i) = (u - (4. / nk(i))) / (2. / nk(i))
-
       root_days(i) = l - 1
 
-      !---
-
     end if
-
-    !---
 
     count = count + 2
 
@@ -2706,15 +2252,14 @@ do i = 2, (len-1)
 
 end do
 
+
 !------
 ! Re-estimate c2 based on integral area under Hermite spline
-
 do i = 1, (len-1)
 
   if(osc_check(i) ) then
 
     !--- Construct fourth degree Hermite at u = 1 (integral [0,1])
-
     del = 1 - root(i)
 
     u = 1.
@@ -2725,19 +2270,16 @@ do i = 1, (len-1)
     G_11 = (u**3) * (3.*u - 4.) / 12.
 
     !--- Assign local control points
-
     yi   = all_cont((2*i)-1)
     yi1  = monthdata(i)
     y2i  = monthdata(i)
     y2i1 = all_cont((2*i)+1)
 
     !--- Assign local slope
-
     mi   = ((yi - all_cont((2*i)-2)) / 1. + (all_cont(2*i) - yi) / 1.) / 2.
     m2i1 = ((all_cont((2*i)+2) - y2i1) / 1. + (y2i1 - all_cont(2*i)) / 1.) / 2.
 
     !--- Calculate new area approximation based on Hermite intergral
-
     area_total = 2. * del * monthdata(i)
 
     top = (G_00 * yi) + (G_10 * del * mi) + (G_01 * yi1) + (G_00 * y2i) + (G_01 * y2i1) + (G_11 * del * m2i1)
@@ -2746,16 +2288,15 @@ do i = 1, (len-1)
     area_int = (area_total - del * (top + yi + y2i)) / bot
 
     !--- Re-assign c2 as the integral-estimated value
-
     c2(i) = (3. * area_int) / (4. * root(i))
 
   end if
 
 end do
 
+
 !------
 ! Generate x_new and y_new series that contains the extra quadratic adjusted segments
-
 allocate(x_new((2*len)+2+count))
 allocate(y_new((2*len)+2+count))
 
@@ -2807,6 +2348,7 @@ end do
 x_new(nn) = kk
 y_new(nn) = all_cont(mm)
 
+
 !------
 ! Construct the spline for daily values based on all_cont
 len_new = size(x_new)
@@ -2828,7 +2370,6 @@ do i = 2, (len_new-1)
 
   !---
   ! Monotonic adjustment to slope
-
   if(d_new(i-1) > 0 .and. d_new(i) < 0) then
 
     m_new(i) = 0
@@ -2857,14 +2398,13 @@ do i = 1, (len_new-1)
 
 end do
 
+
 !------
 ! Reassign quadratic approximation slopes and original slopes to adjusted intervals
 
 do i = 2, (len-1)
 
   if (osc_check(i) ) then
-
-    !slpe_l = findloc(x_new, (real(2*i)-root(i)), dim = 1) ! Find index in x_new = 2*i ('which' function in R)
 
     call findloc(x_new, (real(2*i)-root(i)), slpe_l)
 
@@ -2882,16 +2422,14 @@ do i = 2, (len-1)
 
     m_new(slpe_r+1) = ((all_cont((2*i)+2) - all_cont(2*i+1)) / 1. + (all_cont(2*i+1) - all_cont(2*i)) / 1.) / 2.
 
-    !---
-
   end if
 
 end do
 
 !---
 ! Ensure smooth monotonic interpolation between control points
-
 call monocheck(d_new, m_new)
+
 
 !------
 !Assign the daily value based on sequence
@@ -2902,11 +2440,7 @@ do i = 1, len !outer loop start, for all monthly intervals N
 
   if (.not.osc_check(i)) then ! For intervals that did not required adjustment
 
-    !---
-
     if(mod(nk(i),2) == 0) then !seperate into even or odd months, starting with EVEN
-
-      !---
 
       l = n + nk(i) - 1
 
@@ -2914,11 +2448,7 @@ do i = 1, len !outer loop start, for all monthly intervals N
 
       n = n + nk(i)
 
-      !---
-
     else ! if odd months (or odd number of smaller time step)
-
-      !---
 
       l = n + nk(i) - 1
 
@@ -2926,21 +2456,13 @@ do i = 1, len !outer loop start, for all monthly intervals N
 
       n = n + nk(i)
 
-      !---
-
     end if
 
     k = k + 2
 
-    !---
-
   else if (osc_check(i) ) then ! for intervals adjusted by minmax bound
 
-    !---
-
     if(mod(nk(i),2) == 0) then !seperate into even or odd months, starting with EVEN
-
-      !---
 
       l = n + nk(i) - 1
 
@@ -2948,11 +2470,7 @@ do i = 1, len !outer loop start, for all monthly intervals N
 
       n = n + nk(i)
 
-      !---
-
     else ! if odd months (or odd number of smaller time step)
-
-      !---
 
       l = n + nk(i) - 1
 
@@ -2960,13 +2478,9 @@ do i = 1, len !outer loop start, for all monthly intervals N
 
       n = n + nk(i)
 
-      !---
-
     end if
 
     k = k + 4
-
-    !---
 
   end if
 
@@ -2974,8 +2488,8 @@ end do !end of outer loop
 
 end subroutine newspline_bound_all
 
-!-------------------------------------------------------------------------------
 
+!-------------------------------------------------------------------------------
 subroutine monocheck(d,m)
 
 implicit none
@@ -3044,476 +2558,10 @@ do i = 1, (len-1)
 
 end do
 
-!------
-
 end subroutine monocheck
 
-!-------------------------------------------------------------------------------
-
-subroutine days_even(nk,y_val,m_val,daydata)
-
-implicit none
-
-integer(i4),            intent(in)    :: nk
-real(sp), dimension(:), intent(in)    :: y_val, m_val ! Take in three control points
-!integer(i4),           intent(in)    :: n
-real(sp), dimension(:), intent(inout) :: daydata
-
-! Local variable for generating day fraction from [0,1] for Hermite curve
-integer(i4) :: int_len ! Interval lenght (no. of days)
-integer(i4) :: i,n
-
-real(sp) :: H_00
-real(sp) :: H_01
-real(sp) :: H_10 
-real(sp) :: H_11
-
-real(sp) :: u
-
-!------
-u = 1. / nk
-
-n = 1
-
-do i = 1, (nk / 2)
-
-  H_00 = 1. + (u**2) * (2*u - 3)
-  H_01 = (u**2) * (3 - 2*u)
-  H_10 = u * (u - 1) * (u - 1)
-  H_11 = (u**2) * (u - 1)
-
-  daydata(n) = y_val(1) * H_00 + m_val(1) * H_10 + y_val(2) * H_01 + m_val(2) * H_11
-
-  u = u + (2. / nk)
-
-  n = n + 1
-
-end do
-
-!---
-
-u = 1. / nk
-
-do i = 1, (nk / 2)
-
-  H_00 = 1. + (u**2) * (2*u - 3)
-  H_01 = (u**2) * (3 - 2*u)
-  H_10 = u * (u - 1) * (u - 1)
-  H_11 = (u**2) * (u - 1)
-
-  daydata(n) = y_val(2) * H_00 + m_val(2) * H_10 + y_val(3) * H_01 + m_val(3) * H_11
-
-  u = u + (2. / nk)
-
-  n = n + 1
-
-end do
-
-end subroutine days_even
 
 !-------------------------------------------------------------------------------
-
-subroutine days_odd(nk,y_val,m_val,daydata)
-
-implicit none
-
-integer(i4),            intent(in)    :: nk
-real(sp), dimension(:), intent(in)    :: y_val, m_val ! Take in three control points
-!integer(i4),           intent(inout) :: n
-real(sp), dimension(:), intent(inout) :: daydata
-
-! Local variable for generating day fraction from [0,1] for Hermite curve
-
-integer(i4) :: int_len ! Interval lenght (no. of days)
-integer(i4) :: i,n
-
-real(sp) :: H_00
-real(sp) :: H_01
-real(sp) :: H_10 
-real(sp) :: H_11
-
-real(sp) :: u
-
-!------
-
-u = 1. / nk
-
-n = 1
-
-do i = 1, ((nk+1) / 2)
-
-  H_00 = 1. + (u**2) * (2*u - 3)
-  H_01 = (u**2) * (3 - 2*u)
-  H_10 = u * (u - 1) * (u - 1)
-  H_11 = (u**2) * (u - 1)
-
-  daydata(n) = y_val(1) * H_00 + m_val(1) * H_10 + y_val(2) * H_01 + m_val(2) * H_11
-
-  u = u + (2. / nk)
-
-  n = n + 1
-
-end do
-
-!---
-
-u = 2. / nk
-
-do i = 1, ((nk-1) / 2)
-
-  H_00 = 1. + (u**2) * (2*u - 3)
-  H_01 = (u**2) * (3 - 2*u)
-  H_10 = u * (u - 1) * (u - 1)
-  H_11 = (u**2) * (u - 1)
-
-  daydata(n) = y_val(2) * H_00 + m_val(2) * H_10 + y_val(3) * H_01 + m_val(3) * H_11
-
-  u = u + (2. / nk)
-
-  n = n + 1
-
-end do
-
-end subroutine days_odd
-
-!-------------------------------------------------------------------------------
-
-subroutine days_osc_even(nk,root_days,root,y_val,m_val,daydata)
-
-implicit none
-
-integer(i4),            intent(in)    :: nk
-integer(i4),            intent(in)    :: root_days
-real(sp),               intent(in)    :: root
-real(sp), dimension(:), intent(in)    :: y_val, m_val ! Take in five control points
-!integer(i4),           intent(inout) :: n
-real(sp), dimension(:), intent(inout) :: daydata
-
-! Local variable for generating day fraction from [0,1] for Hermite curve
-
-!integer(i4) :: int_len ! Interval lenght (no. of days)
-integer(i4) :: day_insd
-integer(i4) :: day_outsd
-integer(i4) :: i,n,num
-
-real(sp) :: H_00
-real(sp) :: H_01
-real(sp) :: H_10 
-real(sp) :: H_11
-real(sp) :: del
-real(sp) :: a,b
-real(sp) :: u
-
-!------
-
-day_insd = root_days
-
-day_outsd = (nk / 2) - day_insd
-
-del = 1 - root
-
-!------
-! LEFT INTERVAL (to the midpoint)
-
-! b = root - ((day_insd * 2. - 1) / nk)
-!
-! a = (2. / nk) - b
-
-a = del - ((real(day_outsd) * 2. - 1.) / real(nk))
-
-b = root - ((real(day_insd) * 2. - 1.) / real(nk))
-
-!print *, a, b, del, root, day_insd, day_outsd
-
-!------
-
-n = 1
-
-!------
-! Start with days outside quadratic partition on LEFT interval
-num = (2 * day_outsd) - 1
-
-!u = (1. / num) * (1. - a)
-
-u = (1. / nk) / del
-
-do i = 1, day_outsd
-
-  H_00 = 1. + (u**2) * (2*u - 3)
-  H_01 = (u**2) * (3 - 2*u)
-  H_10 = u * (u - 1) * (u - 1)
-  H_11 = (u**2) * (u - 1)
-
-  daydata(n) = y_val(1) * H_00 + del * m_val(1) * H_10 + y_val(2) * H_01 + del * m_val(2) * H_11
-
-  !u = u + (2. / num) * (1. - a)
-
-  u = u + (2. / nk) / del
-
-  n = n + 1
-
-end do
-
-!---
-! Days inside the quadratic partition on LEFT interval
-num = (2 * day_insd) - 1
-
-!u = b
-
-u = b / root
-
-do i = 1, day_insd
-
-  H_00 = 1. + (u**2) * (2*u - 3)
-  H_01 = (u**2) * (3 - 2*u)
-  H_10 = u * (u - 1) * (u - 1)
-  H_11 = (u**2) * (u - 1)
-
-  daydata(n) = y_val(2) * H_00 + root * m_val(2) * H_10 + y_val(3) * H_01 + root * m_val(3) * H_11
-
-  !u = u + (2. / num) * (1. - b)
-
-  u = u + (2. / nk) / root
-
-  n = n + 1
-
-end do
-
-!------
-! RIGHT INTERVAL (to the midpoint)
-
-! b = (1. - root) - ((day_outsd * 2. - 1) / nk)
-!
-! a = (2. / nk) - b
-
-a = root - ((real(day_insd) * 2. - 1.) / real(nk))
-
-b = del - ((real(day_outsd) * 2. - 1.) / real(nk))
-
-! Days inside quadratic partition on RIGHT interval
-num = (2 * day_insd) - 1
-
-!u = (1. / num) * (1. - a)
-
-u = (1. / nk) / root
-
-do i = 1, day_insd
-
-  H_00 = 1. + (u**2) * (2*u - 3)
-  H_01 = (u**2) * (3 - 2*u)
-  H_10 = u * (u - 1) * (u - 1)
-  H_11 = (u**2) * (u - 1)
-
-  daydata(n) = y_val(3) * H_00 + root * m_val(3) * H_10 + y_val(4) * H_01 + root * m_val(4) * H_11
-
-  !u = u + (2. / num) * (1. - a)
-
-  u = u + (2. / nk) / root
-
-  n = n + 1
-
-end do
-
-!---
-! Days outside the quadratic partition on RIGHT interval
-num = (2 * day_outsd) - 1
-
-!u = b
-
-u = b / del
-
-do i = 1, day_outsd
-
-  H_00 = 1. + (u**2) * (2*u - 3)
-  H_01 = (u**2) * (3 - 2*u)
-  H_10 = u * (u - 1) * (u - 1)
-  H_11 = (u**2) * (u - 1)
-
-  daydata(n) = y_val(4) * H_00 + del * m_val(4) * H_10 + y_val(5) * H_01 + del * m_val(5) * H_11
-
-  !u = u + (2. / num) * (1. - b)
-
-  u = u + (2. / nk) / del
-
-  n = n + 1
-
-end do
-
-end subroutine days_osc_even
-
-!-------------------------------------------------------------------------------
-
-subroutine days_osc_odd(nk,root_days,root,y_val,m_val,daydata)
-
-implicit none
-
-integer(i4)           , intent(in)    :: nk
-integer(i4)           , intent(in)    :: root_days
-real(sp)              , intent(in)    :: root
-real(sp), dimension(:), intent(in)    :: y_val, m_val ! Take in five control points
-!integer(i4)              , intent(inout) :: n
-real(sp), dimension(:), intent(inout) :: daydata
-
-! Local variable for generating day fraction from [0,1] for Hermite curve
-!integer(i4) :: int_len ! Interval lenght (no. of days)
-integer(i4) :: day_insd, day_outsd
-integer(i4) :: i, n, num
-
-real(sp) :: H_00
-real(sp) :: H_01
-real(sp) :: H_10 
-real(sp) :: H_11
-real(sp) :: del
-real(sp) :: a,b
-real(sp) :: u
-
-!------
-! LEFT INTERVAL (to the midpoint)
-
-day_insd = root_days !+ 1
-
-day_outsd = ((nk+1) / 2) - day_insd
-
-del = 1. - root
-
-!------
-
-! b = root - ((day_insd * 2. - 2) / nk)
-!
-! a = (2. / nk) - b
-
-a = del - ((real(day_outsd) * 2. - 1.) / real(nk))
-
-b = root - ((real(day_insd) * 2. - 2.) / real(nk))
-
-!print *, a, b, del, root, day_insd, day_outsd
-
-!------
-
-n = 1
-
-!------
-! Start with days outside quadratic partition on LEFT interval
-num = (2 * day_outsd) - 1
-
-!u = (1. / num) * (1. - a)
-
-u = (1. / real(nk)) / del
-
-do i = 1, day_outsd
-
-  H_00 = 1. + (u**2) * (2*u - 3)
-  H_01 = (u**2) * (3 - 2*u)
-  H_10 = u * (u - 1) * (u - 1)
-  H_11 = (u**2) * (u - 1)
-
-  daydata(n) = y_val(1) * H_00 + del * m_val(1) * H_10 + y_val(2) * H_01 + del * m_val(2) * H_11
-
-  !u = u + (2. / num) * (1. - a)
-
-  u = u + (2. / real(nk)) / del
-
-  n = n + 1
-
-end do
-
-!---
-! Days inside the quadratic partition on LEFT interval
-num = (2 * day_insd) - 2
-
-!u = b
-
-u = b / root
-
-do i = 1, day_insd
-
-  H_00 = 1. + (u**2) * (2*u - 3)
-  H_01 = (u**2) * (3 - 2*u)
-  H_10 = u * (u - 1) * (u - 1)
-  H_11 = (u**2) * (u - 1)
-
-  daydata(n) = y_val(2) * H_00 + root * m_val(2) * H_10 + y_val(3) * H_01 + root * m_val(3) * H_11
-
-  !u = u + (2. / num) * (1. - b)
-
-  u = u + (2. / real(nk)) / root
-
-  n = n + 1
-
-end do
-
-!------
-! RIGHT INTERVAL (to the midpoint)
-
-day_insd = root_days - 1
-
-day_outsd = ((nk-1) / 2) - day_insd
-
-!------
-
-! b = (1. - root) - ((day_outsd * 2. - 1) / nk)
-!
-! a = (2. / nk) - b
-
-a = root - ((real(day_insd) * 2.) / real(nk))
-
-b = del - ((real(day_outsd) * 2. - 1.) / real(nk))
-
-!print *, a, b, del, root, day_insd, day_outsd
-
-! Days inside quadratic partition on RIGHT interval
-num = (2 * day_insd)
-
-!u = (2. / num) * (1. - a)
-
-u = (2. / real(nk)) / root
-
-do i = 1, day_insd
-
-  H_00 = 1. + (u**2) * (2*u - 3)
-  H_01 = (u**2) * (3 - 2*u)
-  H_10 = u * (u - 1) * (u - 1)
-  H_11 = (u**2) * (u - 1)
-
-  daydata(n) = y_val(3) * H_00 + root * m_val(3) * H_10 + y_val(4) * H_01 + root * m_val(4) * H_11
-
-  !u = u + (2. / num) * (1. - a)
-
-  u = u + (2. / real(nk)) / root
-
-  n = n + 1
-
-end do
-
-!---
-! Days outside the quadratic partition on RIGHT interval
-num = (2 * day_outsd) - 1
-
-!u = b
-
-u = b / del
-
-do i = 1, day_outsd
-
-  H_00 = 1. + (u**2) * (2*u - 3)
-  H_01 = (u**2) * (3 - 2*u)
-  H_10 = u * (u - 1) * (u - 1)
-  H_11 = (u**2) * (u - 1)
-
-  daydata(n) = y_val(4) * H_00 + del * m_val(4) * H_10 + y_val(5) * H_01 + del * m_val(5) * H_11
-
-  !u = u + (2. / num) * (1. - b)
-
-  u = u + (2. / real(nk)) / del
-
-  n = n + 1
-
-end do
-
-end subroutine days_osc_odd
-
-!-------------------------------------------------------------------------------
-
 subroutine mono_adjust(monthdata, all_cont)
 
 implicit none
@@ -3522,16 +2570,12 @@ real(sp), dimension(:), intent(in)    :: monthdata
 real(sp), dimension(:), intent(inout) :: all_cont
 
 ! Local variables for checking monotonicity
-
 integer(i4), dimension(:), allocatable :: d_orig
 logical    , dimension(:), allocatable :: slope_check
 
 ! Local 2x2 matrix system to determine new wall / mid-control points
-
 real(sp)   , dimension(2,2) :: s_mat
 real(sp)   , dimension(2)   :: s_sol
-integer(i4), dimension(2)   :: indx
-real(sp)                    :: dd
 
 real(sp) :: G_00, G_10, G_01, G_11
 real(sp) :: u
@@ -3586,7 +2630,6 @@ end do
 !------
 ! Procedures to check monotonicity and adjust mid-control + left/right wall-control accordingly
 ! all_cont WILL BE ALTERED after this procedure
-
 do i = 2, (len-1)
 
   if (d_orig(i) == 1) then
@@ -3643,9 +2686,7 @@ do i = 2, (len-1)
 
       !---
 
-      call ludcmp(s_mat, indx, dd)
-
-      call lubksb(s_mat, indx, s_sol)
+      call matsol(s_mat, s_sol)
 
       !---
 
@@ -3674,9 +2715,7 @@ do i = 2, (len-1)
 
       !---
 
-      call ludcmp(s_mat, indx, dd)
-
-      call lubksb(s_mat, indx, s_sol)
+      call matsol(s_mat, s_sol)
 
       !---
 
@@ -3694,202 +2733,404 @@ end do
 
 end subroutine mono_adjust
 
+
 !-------------------------------------------------------------------------------
-
-subroutine ludcmp(a,indx,d)
-
-! LU decompose a NxN matrix
+subroutine days_even(nk,y_val,m_val,daydata)
 
 implicit none
 
-real(sp),    dimension(:,:), intent(inout) :: a
-integer(i4), dimension(:),   intent(out)   :: indx
-real(sp),                    intent(out)   :: d
+integer(i4),               intent(in)    :: nk
+real(sp),    dimension(:), intent(in)    :: y_val, m_val ! Take in three control points
+real(sp),    dimension(:), intent(inout) :: daydata
 
-real(sp), dimension(size(a,1)) :: vv
-real(sp), parameter            :: sptiny = tiny(1._sp)
-integer(i4)                    :: j,n,imax
+! Local variable for generating day fraction from [0,1] for Hermite curve
+integer(i4) :: int_len ! Interval lenght (no. of days)
+integer(i4) :: i,n
 
+real(sp) :: H_00
+real(sp) :: H_01
+real(sp) :: H_10
+real(sp) :: H_11
 
-n = assert_eq(size(a,1), size(a,2), size(indx), 'ludcmp')
+real(sp) :: u
 
-d = 1.0
+!------
+u = 1. / nk
 
-vv = maxval(abs(a), dim = 2)
+n = 1
 
-if (any(vv == 0.0)) call nrerror('singular matrix in ludcmp')
+do i = 1, (nk / 2)
 
-vv = 1.0_sp / vv
+  H_00 = 1. + (u**2) * (2*u - 3)
+  H_01 = (u**2) * (3 - 2*u)
+  H_10 = u * (u - 1) * (u - 1)
+  H_11 = (u**2) * (u - 1)
 
-do j = 1, n
+  daydata(n) = y_val(1) * H_00 + m_val(1) * H_10 + y_val(2) * H_01 + m_val(2) * H_11
 
-  imax = (j-1) + imaxloc(vv(j:n) * abs(a(j:n,j)))
+  u = u + (2. / nk)
 
-  if (j /= imax) then
-    call swap(a(imax,:), a(j,:))
-    d = -d
-    vv(imax) = vv(j)
-  end if
-
-  indx(j) = imax
-
-  if (a(j,j) == 0.0) a(j,j) = sptiny
-
-  a(j+1:n, j) = a(j+1:n, j) / a(j,j)
-  a(j+1:n, j+1:n) = a(j+1:n, j+1:n) - outerprod(a(j+1:n, j), a(j,j+1:n))
+  n = n + 1
 
 end do
 
-end subroutine ludcmp
+!---
+
+u = 1. / nk
+
+do i = 1, (nk / 2)
+
+  H_00 = 1. + (u**2) * (2*u - 3)
+  H_01 = (u**2) * (3 - 2*u)
+  H_10 = u * (u - 1) * (u - 1)
+  H_11 = (u**2) * (u - 1)
+
+  daydata(n) = y_val(2) * H_00 + m_val(2) * H_10 + y_val(3) * H_01 + m_val(3) * H_11
+
+  u = u + (2. / nk)
+
+  n = n + 1
+
+end do
+
+end subroutine days_even
+
 
 !-------------------------------------------------------------------------------
-
-subroutine lubksb(a,indx,b)
-
-! Solve linear system from LU decomposed matrix A
-! Solve A . X = B, input right-hand side vector B and return solution X (inout)
+subroutine days_odd(nk,y_val,m_val,daydata)
 
 implicit none
 
-real(sp),    dimension(:,:), intent(in)    :: a
-integer(i4), dimension(:),   intent(in)    :: indx
-real(sp),    dimension(:),   intent(inout) :: b
+integer(i4),               intent(in)    :: nk
+real(sp),    dimension(:), intent(in)    :: y_val, m_val ! Take in three control points
+real(sp),    dimension(:), intent(inout) :: daydata
 
-integer(i4) :: i, n, ii, ll
-real(sp)     :: summ
+! Local variable for generating day fraction from [0,1] for Hermite curve
+integer(i4) :: i,n
 
-n = assert_eq(size(a,1), size(a,2), size(indx), 'lubksb')
+real(sp) :: H_00
+real(sp) :: H_01
+real(sp) :: H_10
+real(sp) :: H_11
 
-ii = 0
+real(sp) :: u
 
-do i = 1, n
+!------
 
-  ll = indx(i)
-  summ = b(ll)
-  b(ll) = b(i)
+u = 1. / nk
 
-  if (ii /= 0) then
+n = 1
 
-    summ = summ - dot_product(a(i, ii:i-1), b(ii:i-1))
+do i = 1, ((nk+1) / 2)
 
-  else if (summ /= 0.0) then
+  H_00 = 1. + (u**2) * (2*u - 3)
+  H_01 = (u**2) * (3 - 2*u)
+  H_10 = u * (u - 1) * (u - 1)
+  H_11 = (u**2) * (u - 1)
 
-    ii = i
+  daydata(n) = y_val(1) * H_00 + m_val(1) * H_10 + y_val(2) * H_01 + m_val(2) * H_11
 
-  end if
+  u = u + (2. / nk)
 
-  b(i) = summ
+  n = n + 1
+
+end do
+
+!---
+
+u = 2. / nk
+
+do i = 1, ((nk-1) / 2)
+
+  H_00 = 1. + (u**2) * (2*u - 3)
+  H_01 = (u**2) * (3 - 2*u)
+  H_10 = u * (u - 1) * (u - 1)
+  H_11 = (u**2) * (u - 1)
+
+  daydata(n) = y_val(2) * H_00 + m_val(2) * H_10 + y_val(3) * H_01 + m_val(3) * H_11
+
+  u = u + (2. / nk)
+
+  n = n + 1
+
+end do
+
+end subroutine days_odd
+
+
+!-------------------------------------------------------------------------------
+subroutine days_osc_even(nk,root_days,root,y_val,m_val,daydata)
+
+implicit none
+
+integer(i4),               intent(in)    :: nk
+integer(i4),               intent(in)    :: root_days
+real(sp),                  intent(in)    :: root
+real(sp),    dimension(:), intent(in)    :: y_val, m_val ! Take in five control points
+real(sp),    dimension(:), intent(inout) :: daydata
+
+! Local variable for generating day fraction from [0,1] for Hermite curve
+integer(i4) :: day_insd
+integer(i4) :: day_outsd
+integer(i4) :: i, n, num
+
+real(sp) :: H_00
+real(sp) :: H_01
+real(sp) :: H_10
+real(sp) :: H_11
+real(sp) :: del
+real(sp) :: a,b
+real(sp) :: u
+
+!------
+
+day_insd = root_days
+
+day_outsd = (nk / 2) - day_insd
+
+del = 1 - root
+
+!------
+! LEFT INTERVAL (to the midpoint)
+a = del - ((real(day_outsd) * 2. - 1.) / real(nk))
+
+b = root - ((real(day_insd) * 2. - 1.) / real(nk))
+
+
+!------
+! Start with days outside quadratic partition on LEFT interval
+n = 1
+
+num = (2 * day_outsd) - 1
+
+u = (1. / nk) / del
+
+do i = 1, day_outsd
+
+  H_00 = 1. + (u**2) * (2*u - 3)
+  H_01 = (u**2) * (3 - 2*u)
+  H_10 = u * (u - 1) * (u - 1)
+  H_11 = (u**2) * (u - 1)
+
+  daydata(n) = y_val(1) * H_00 + del * m_val(1) * H_10 + y_val(2) * H_01 + del * m_val(2) * H_11
+
+  u = u + (2. / nk) / del
+
+  n = n + 1
+
+end do
+
+!---
+! Days inside the quadratic partition on LEFT interval
+num = (2 * day_insd) - 1
+
+u = b / root
+
+do i = 1, day_insd
+
+  H_00 = 1. + (u**2) * (2*u - 3)
+  H_01 = (u**2) * (3 - 2*u)
+  H_10 = u * (u - 1) * (u - 1)
+  H_11 = (u**2) * (u - 1)
+
+  daydata(n) = y_val(2) * H_00 + root * m_val(2) * H_10 + y_val(3) * H_01 + root * m_val(3) * H_11
+
+  u = u + (2. / nk) / root
+
+  n = n + 1
+
+end do
+
+!------
+! RIGHT INTERVAL (to the midpoint)
+a = root - ((real(day_insd) * 2. - 1.) / real(nk))
+
+b = del - ((real(day_outsd) * 2. - 1.) / real(nk))
+
+! Days inside quadratic partition on RIGHT interval
+num = (2 * day_insd) - 1
+
+u = (1. / nk) / root
+
+do i = 1, day_insd
+
+  H_00 = 1. + (u**2) * (2*u - 3)
+  H_01 = (u**2) * (3 - 2*u)
+  H_10 = u * (u - 1) * (u - 1)
+  H_11 = (u**2) * (u - 1)
+
+  daydata(n) = y_val(3) * H_00 + root * m_val(3) * H_10 + y_val(4) * H_01 + root * m_val(4) * H_11
+
+  u = u + (2. / nk) / root
+
+  n = n + 1
+
+end do
+
+!---
+! Days outside the quadratic partition on RIGHT interval
+num = (2 * day_outsd) - 1
+
+u = b / del
+
+do i = 1, day_outsd
+
+  H_00 = 1. + (u**2) * (2*u - 3)
+  H_01 = (u**2) * (3 - 2*u)
+  H_10 = u * (u - 1) * (u - 1)
+  H_11 = (u**2) * (u - 1)
+
+  daydata(n) = y_val(4) * H_00 + del * m_val(4) * H_10 + y_val(5) * H_01 + del * m_val(5) * H_11
+
+  u = u + (2. / nk) / del
+
+  n = n + 1
+
+end do
+
+end subroutine days_osc_even
+
+
+!-------------------------------------------------------------------------------
+subroutine days_osc_odd(nk,root_days,root,y_val,m_val,daydata)
+
+implicit none
+
+integer(i4)           , intent(in)    :: nk
+integer(i4)           , intent(in)    :: root_days
+real(sp)              , intent(in)    :: root
+real(sp), dimension(:), intent(in)    :: y_val, m_val ! Take in five control points
+real(sp), dimension(:), intent(inout) :: daydata
+
+! Local variable for generating day fraction from [0,1] for Hermite curve
+integer(i4) :: day_insd, day_outsd
+integer(i4) :: i, n, num
+
+real(sp) :: H_00
+real(sp) :: H_01
+real(sp) :: H_10
+real(sp) :: H_11
+real(sp) :: del
+real(sp) :: a,b
+real(sp) :: u
+
+
+!------
+! LEFT INTERVAL (to the midpoint)
+day_insd = root_days !+ 1
+
+day_outsd = ((nk+1) / 2) - day_insd
+
+del = 1. - root
+
+!---
+
+a = del - ((real(day_outsd) * 2. - 1.) / real(nk))
+
+b = root - ((real(day_insd) * 2. - 2.) / real(nk))
+
+
+!------
+! Start with days outside quadratic partition on LEFT interval
+n = 1
+
+num = (2 * day_outsd) - 1
+
+u = (1. / real(nk)) / del
+
+do i = 1, day_outsd
+
+  H_00 = 1. + (u**2) * (2*u - 3)
+  H_01 = (u**2) * (3 - 2*u)
+  H_10 = u * (u - 1) * (u - 1)
+  H_11 = (u**2) * (u - 1)
+
+  daydata(n) = y_val(1) * H_00 + del * m_val(1) * H_10 + y_val(2) * H_01 + del * m_val(2) * H_11
+
+  u = u + (2. / real(nk)) / del
+
+  n = n + 1
+
+end do
+
+!---
+! Days inside the quadratic partition on LEFT interval
+num = (2 * day_insd) - 2
+
+u = b / root
+
+do i = 1, day_insd
+
+  H_00 = 1. + (u**2) * (2*u - 3)
+  H_01 = (u**2) * (3 - 2*u)
+  H_10 = u * (u - 1) * (u - 1)
+  H_11 = (u**2) * (u - 1)
+
+  daydata(n) = y_val(2) * H_00 + root * m_val(2) * H_10 + y_val(3) * H_01 + root * m_val(3) * H_11
+
+  u = u + (2. / real(nk)) / root
+
+  n = n + 1
 
 end do
 
 
-do i = n, 1, -1
+!------
+! RIGHT INTERVAL (to the midpoint)
+day_insd = root_days - 1
 
-  b(i) = (b(i) - dot_product(a(i, i+1:n), b(i+1:n))) / a(i,i)
+day_outsd = ((nk-1) / 2) - day_insd
+
+!------
+
+a = root - ((real(day_insd) * 2.) / real(nk))
+
+b = del - ((real(day_outsd) * 2. - 1.) / real(nk))
+
+
+! Days inside quadratic partition on RIGHT interval
+num = (2 * day_insd)
+
+u = (2. / real(nk)) / root
+
+do i = 1, day_insd
+
+  H_00 = 1. + (u**2) * (2*u - 3)
+  H_01 = (u**2) * (3 - 2*u)
+  H_10 = u * (u - 1) * (u - 1)
+  H_11 = (u**2) * (u - 1)
+
+  daydata(n) = y_val(3) * H_00 + root * m_val(3) * H_10 + y_val(4) * H_01 + root * m_val(4) * H_11
+
+  u = u + (2. / real(nk)) / root
+
+  n = n + 1
 
 end do
 
-end subroutine lubksb
 
-!-------------------------------------------------------------------------------
+!---
+! Days outside the quadratic partition on RIGHT interval
+num = (2 * day_outsd) - 1
 
-subroutine sprsin_sp(a,thresh,sa)  ! FLAG CHECK FOR OPEN SOURCE
+u = b / del
 
-implicit none
+do i = 1, day_outsd
 
-real(sp),       dimension(:,:), intent(in)  :: a
-real(sp),                       intent(in)  :: thresh
-type(sprs2_sp),                 intent(out) :: sa
+  H_00 = 1. + (u**2) * (2*u - 3)
+  H_01 = (u**2) * (3 - 2*u)
+  H_10 = u * (u - 1) * (u - 1)
+  H_11 = (u**2) * (u - 1)
 
-integer(i4)                              :: n, len
-real(sp), dimension(:), allocatable      :: vec
-logical,  dimension(:), allocatable      :: mask_vec
-logical,  dimension(size(a,1),size(a,2)) :: mask
-integer(i4)                              :: i
+  daydata(n) = y_val(4) * H_00 + del * m_val(4) * H_10 + y_val(5) * H_01 + del * m_val(5) * H_11
 
-!----
+  u = u + (2. / real(nk)) / del
 
-n = assert_eq(size(a,1),size(a,2),'sprsin_sp')
+  n = n + 1
 
-mask = abs(a) > thresh
-
-vec = reshape(a, [n*n])
-
-mask_vec = reshape(mask, [n*n])
-
-do i = 2, (n*n-1)
-  if (vec(i) == 0.) then
-    if (vec(i-1) /= 0. .and. vec(i+1) /= 0.) then   ! Zero values are TRUE if surrounded by two real values (given nature of the mcspline sparce matrix)
-      mask_vec(i) = .TRUE.
-    end if
-  end if
-
-  if (vec(i) < 0.) then   ! Account for negative values masked by thresh
-    mask_vec(i) = .TRUE.
-  end if
 end do
 
-mask = reshape(mask_vec, [n,n])
+end subroutine days_osc_odd
 
-len = count(mask)
-
-allocate(sa%val(len), sa%irow(len), sa%jcol(len))
-
-sa%n = n
-sa%len = len
-sa%val = pack(a, mask)
-sa%irow = pack(spread(arth(1,1,n),2,n),mask)
-sa%jcol = pack(spread(arth(1,1,n),1,n),mask)
-
-end subroutine sprsin_sp
-
-!-------------------------------------------------------------------------------
-
-subroutine sprsax_sp(sa,x,b)       ! FLAG CHECK FOR OPEN SOURCE
-
-implicit none
-
-type(sprs2_sp),               intent(in)  :: sa
-real(sp),       dimension(:), intent(in)  :: x
-real(sp),       dimension(:), intent(out) :: b
-
-integer(i4) :: ndum
-
-!----
-
-ndum = assert_eq(sa%n, size(x), size(b), 'sprsax_sp')  ! FLAG REPLACE
-
-b = 0._sp
-
-call scatter_add(b, sa%val * x(sa%jcol), sa%irow)
-
-end subroutine sprsax_sp
-
-!-------------------------------------------------------------------------------
-
-subroutine findloc(mat,x,loc)  
-
-implicit none
-
-real(sp), dimension(:), intent(in)  :: mat
-real(sp),               intent(in)  :: x
-integer(i4),            intent(out) :: loc
-
-real(sp), dimension(:), allocatable :: diff
-integer(i4) :: i,len
-
-!----
-
-len = size(mat)
-
-allocate(diff(len))
-
-diff = abs(mat - x)
-
-loc = minloc(diff,dim=1)
-
-end subroutine findloc
-
-!-------------------------------------------------------------------------------
 
 end module newsplinemod

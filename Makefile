@@ -5,10 +5,10 @@ FCFLAGS  = -ffree-form -ffree-line-length-none
 
 #---------------------------------------------
 
-OBJS = nrtype.o  	\
-	nrutil.o      	\
-        newsplinemod.o	\
-	output_daily_final.o
+OBJS = parametersmod.o			\
+			 utilitiesmod.o    		\
+			 newsplinemod.o				\
+       output_daily_final.o
 
 
 .SUFFIXES: .o .f90 .f .mod
@@ -22,4 +22,4 @@ newspline: $(OBJS)
 	$(FC) $(FCFLAGS) -o newspline $(OBJS)
 
 clean::
-	-rm *.o *.mod
+	-rm newspline *.o *.mod
