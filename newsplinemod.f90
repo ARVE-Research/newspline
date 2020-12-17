@@ -1,7 +1,6 @@
 module newsplinemod
 
 use iso_fortran_env
-use nrutil,   only : assert_eq, imaxloc, nrerror, outerprod, swap
 
 implicit none
 
@@ -23,7 +22,7 @@ contains
 ! llim (optional): absolute lower limit (real number)
 ! ulim (optional): absolute upper limit (real number)
 ! plim (optional): percentage limit (real number > 0.)
-! prec (optional): decimal places of output (integer => 0)
+! prec (optional): decimal places of output (integer(i4) => 0)
 !---
 ! All options can be applied simultaneously.
 
@@ -38,16 +37,17 @@ contains
 
 !-------------------------------------------------------------------------------
 ! Wrapper subroutine with all optional arguments
+
 subroutine newspline_all(monthdata,nk,daydata,llim,ulim,plim,prec)
 
 implicit none
-real(sp)   , dimension(:), intent(in)  :: monthdata
+real(sp), dimension(:),    intent(in)  :: monthdata
 integer(i4), dimension(:), intent(in)  :: nk
-real(sp)   , dimension(:), intent(out) :: daydata
-real(sp)   , optional    , intent(in)  :: llim
-real(sp)   , optional    , intent(in)  :: ulim
-real(sp)   , optional    , intent(in)  :: plim
-integer(i4), optional    , intent(in)  :: prec
+real(sp), dimension(:),    intent(out) :: daydata
+real(sp), optional,        intent(in)  :: llim
+real(sp), optional,        intent(in)  :: ulim
+real(sp), optional,        intent(in)  :: plim
+integer(i4), optional,     intent(in)  :: prec
 
 integer(i4) :: precision
 integer(i4), dimension(:), allocatable :: int_daydata
@@ -152,6 +152,7 @@ integer(i4) :: n_iter
 integer(i4) :: i,n
 
 !------
+
 len = size(monthdata)
 
 n_iter = 0
@@ -205,7 +206,7 @@ end do
 end subroutine newspline_recur
 
 !-------------------------------------------------------------------------------
-! Newspline (w/ minmax bound) routine put in do-while loop to limit interpolated daily values by an error boundary
+! newspline (w/ minmax bound) routine put in do-while loop to limit interpolated daily values by an error boundary
 
 subroutine newspline_bound_recur(monthdata,nk,daydata,llim,ulim,error_bound)
 
@@ -398,8 +399,8 @@ real(sp), dimension(:), allocatable :: all_cont
 real(sp), dimension(:), allocatable :: d_cont
 real(sp), dimension(:), allocatable :: m_cont
 
-integer :: len_cont
-integer :: k
+integer(i4) :: len_cont
+integer(i4) :: k
 
 ! Hermite cubic and quartic spline basis functions
 
@@ -407,8 +408,8 @@ real(sp) :: H_00, H_10, H_01, H_11
 real(sp) :: G_00, G_10, G_01, G_11
 real(sp) :: u,z
 
-integer :: len
-integer :: i,j,n
+integer(i4) :: len
+integer(i4) :: i,j,n
 
 !----------------------------------------------------------------
 ! Start of the spline routine
@@ -514,6 +515,7 @@ G_11 = (u**3) * (3.*u - 4.) / 12.
 mat = 0.
 
 ! Consider two "buffer midpoints" outside of first and last interval
+
 mat(1,1) = 0.5 * G_10 + G_01 + G_00 - 0.5 * G_11 + 1.
 mat(1,2) = 0.5 * G_11
 
@@ -706,68 +708,78 @@ do i = 1, len !outer loop start, for all monthly intervals N
 
 end do !end of outer loop
 
-
 end subroutine newspline
-
-
 
 !-------------------------------------------------------------------------------
 subroutine newspline_bound(monthdata,nk,daydata,llim,ulim)
 
 implicit none
-real(sp),      dimension(:), intent(in)  :: monthdata
-integer(i4),  dimension(:), intent(in)  :: nk
-real(sp),      dimension(:), intent(out) :: daydata
-real(sp)                   , intent(in)  :: llim
-real(sp)                   , intent(in)  :: ulim
 
+real(sp),     dimension(:), intent(in)  :: monthdata
+integer(i4),  dimension(:), intent(in)  :: nk
+real(sp),     dimension(:), intent(out) :: daydata
+real(sp),                   intent(in)  :: llim
+real(sp),                   intent(in)  :: ulim
 
 ! Local variables for first mid control points
+
 real(sp), dimension(:), allocatable :: fmc
 real(sp), dimension(:), allocatable :: d
 real(sp), dimension(:), allocatable :: m
 
 ! Local variables for wall control points
+
 real(sp), dimension(:), allocatable :: swc
 
 ! Local variables for linear system of mid control adjustments
-real(sp),     dimension(:,:), allocatable :: mat
+
+real(sp),    dimension(:,:), allocatable :: mat
 integer(i4), dimension(:),   allocatable :: indx
-real(sp),     dimension(:),   allocatable :: solution
-real(sp),     dimension(:),   allocatable :: all_solution
-real(sp)                                  :: dd
+real(sp),    dimension(:),   allocatable :: solution
+real(sp),    dimension(:),   allocatable :: all_solution
+real(sp)                                 :: dd
 
 integer(i4) :: len
 integer(i4) :: i, j, n
 
 ! Final vector of all control points
+
 real(sp), dimension(:), allocatable :: all_cont
 
 ! Hermite cubic quartic spline basis functions
-real(sp)     :: H_00, H_10, H_01, H_11
-real(sp)     :: u, z
+
+real(sp) :: H_00
+real(sp) :: H_01
+real(sp) :: H_10
+real(sp) :: H_11
+
+real(sp) :: u, z
 integer(i4) :: l
 
 ! Local variables for generating daily values after minmax bound adjustment of all_cont
+
 real(sp), dimension(:), allocatable :: d_new
 real(sp), dimension(:), allocatable :: m_new
+
 integer(i4) :: len_new
 integer(i4) :: slpe_l, slpe_r
 integer(i4) :: k
 
 ! Local variables for max and min bound adjustments
-integer(i4),  dimension(:), allocatable :: d_orig
-logical,       dimension(:), allocatable :: osc_check
-real(sp),      dimension(:), allocatable :: c2
-real(sp),      dimension(:), allocatable :: root
-integer(i4),  dimension(:), allocatable :: root_days
+
+integer(i4), dimension(:), allocatable :: d_orig
+logical,     dimension(:), allocatable :: osc_check
+real(sp),    dimension(:), allocatable :: c2
+real(sp),    dimension(:), allocatable :: root
+integer(i4), dimension(:), allocatable :: root_days
 
 ! Local variables for calculating root of quadratic approximation
-real(sp)      :: diff_yi1
-real(sp)      :: diff_yi
-real(sp)      :: top, bot
-real(sp)      :: root_adj
-integer(i4)  :: count
+
+real(sp)    :: diff_yi1
+real(sp)    :: diff_yi
+real(sp)    :: top, bot
+real(sp)    :: root_adj
+integer(i4) :: count
 
 real(sp) :: del
 real(sp) :: G_00, G_10, G_01, G_11
@@ -779,8 +791,8 @@ real(sp) :: area_int
 ! Local variables for x_new and y_new
 real(sp), dimension(:), allocatable :: x_new
 real(sp), dimension(:), allocatable :: y_new
-real(sp)      :: kk
-integer(i4)  :: nn, mm
+real(sp)    :: kk
+integer(i4) :: nn, mm
 
 
 !------------------
@@ -1196,9 +1208,9 @@ do i = 1, (len-1)
 
 end do
 
-
 !------
 ! Generate x_new and y_new series that contains the extra quadratic adjusted segments
+
 allocate(x_new((2*len)+2+count))
 allocate(y_new((2*len)+2+count))
 
@@ -1423,8 +1435,6 @@ end do !end of outer loop
 
 end subroutine newspline_bound
 
-
-
 !-------------------------------------------------------------------------------
 subroutine newspline_pbound(monthdata,nk,daydata,plim)
 
@@ -1485,18 +1495,25 @@ real(sp)      :: root_adj
 integer(i4)  :: count
 
 real(sp) :: del
-real(sp) :: G_00, G_10, G_01, G_11
-real(sp) :: yi, yi1, y2i, y2i1
+
+real(sp) :: G_00
+real(sp) :: G_01
+real(sp) :: G_10
+real(sp) :: G_11
+
+real(sp) :: yi, yi1
+real(sp) :: y2i, y2i1
+
 real(sp) :: mi, m2i1
 real(sp) :: area_total
 real(sp) :: area_int
 
 ! Local variables for x_new and y_new
+
 real(sp), dimension(:), allocatable :: x_new
 real(sp), dimension(:), allocatable :: y_new
 real(sp)      :: kk
 integer(i4)  :: nn, mm
-
 
 !------------------
 ! PART 1: Determine all wall and mid control points
@@ -1547,7 +1564,6 @@ end do
 m(1)     = d(1)
 m(len+2) = d(len+1)
 
-
 do i = 1, (len+1)
 
   if(d(i) == 0) then
@@ -1559,12 +1575,10 @@ do i = 1, (len+1)
 
 end do
 
-
 !---
 ! Ensure smooth monotonic interpolation between control points
 
 call monocheck(d,m)
-
 
 !------
 ! Calculate "second" wall control based on interception of Hermite functions
@@ -1604,8 +1618,8 @@ G_11 = (u**3) * (3*u - 4.) / 12.
 
 mat = 0.
 
-
 ! Consider two "midpoints" outside of first and last interval
+
 mat(1,1) = 0.5 * G_10 + G_01 + G_00 - 0.5 * G_11 + 1.
 mat(1,2) = 0.5 * G_11
 
@@ -1639,16 +1653,15 @@ do i = 2, (len-1)
 
 end do
 
-
-
 ! Solve linear system to get final mid control points
+
 call ludcmp(mat, indx, dd)
 
 call lubksb(mat, indx, solution)
 
-
 !------
 ! Compile "second" wall control with newly adjusted mid control points (all_cont)
+
 allocate(all_solution(len+2))
 
 all_solution(1)       = monthdata(1)
@@ -1672,14 +1685,11 @@ end do
 
 all_cont(size(all_cont)) = swc(size(swc))
 
-
 !------------------
 ! PART 2: Adjust monotonicty using the tridiagonal equation
 !------------------
 
 call mono_adjust(monthdata, all_cont)
-
-
 
 !------------------
 ! PART 3: Adjustment to maximum and minimum bound
@@ -1938,6 +1948,7 @@ end do
 
 !------
 ! Generate x_new and y_new series that contains the extra quadratic adjusted segments
+
 allocate(x_new((2*len)+2+count))
 allocate(y_new((2*len)+2+count))
 
@@ -1989,10 +2000,9 @@ end do
 x_new(nn) = kk
 y_new(nn) = all_cont(mm)
 
-
-
 !------
 ! Construct the spline for daily values based on all_cont
+
 len_new = size(x_new)
 
 allocate(d_new(len_new-1))
@@ -2041,7 +2051,6 @@ do i = 1, (len_new-1)
 
 end do
 
-
 !------
 ! Reassign quadratic approximation slopes and original slopes to adjusted intervals
 
@@ -2073,13 +2082,10 @@ do i = 2, (len-1)
 
 end do
 
-
 !---
 ! Ensure smooth monotonic interpolation between control points
 
 call monocheck(d_new, m_new)
-
-
 
 !------
 !Assign the daily value based on sequence
@@ -2163,87 +2169,106 @@ end do !end of outer loop
 
 end subroutine newspline_pbound
 
-
-
 !-------------------------------------------------------------------------------
 subroutine newspline_bound_all(monthdata,nk,daydata,llim,ulim,plim)
 
 implicit none
-real(sp),      dimension(:), intent(in)  :: monthdata
-integer(i4),  dimension(:), intent(in)  :: nk
-real(sp),      dimension(:), intent(out) :: daydata
-real(sp)                   , intent(in)  :: llim
-real(sp)                   , intent(in)  :: ulim
-real(sp)                   , intent(in)  :: plim ! taken in a 0-100
 
+real(sp),    dimension(:), intent(in)  :: monthdata
+integer(i4), dimension(:), intent(in)  :: nk
+real(sp),    dimension(:), intent(out) :: daydata
+real(sp),                  intent(in)  :: llim
+real(sp),                  intent(in)  :: ulim
+real(sp),                  intent(in)  :: plim ! taken in a 0-100
 
 ! Local variables for first mid control points
+
 real(sp), dimension(:), allocatable :: fmc
 real(sp), dimension(:), allocatable :: d
 real(sp), dimension(:), allocatable :: m
 
 ! Local variables for wall control points
+
 real(sp), dimension(:), allocatable :: swc
 
 ! Local variables for linear system of mid control adjustments
-real(sp),     dimension(:,:), allocatable :: mat
+
+real(sp),    dimension(:,:), allocatable :: mat
 integer(i4), dimension(:),   allocatable :: indx
-real(sp),     dimension(:),   allocatable :: solution
-real(sp),     dimension(:),   allocatable :: all_solution
-real(sp)                                  :: dd
+real(sp),    dimension(:),   allocatable :: solution
+real(sp),    dimension(:),   allocatable :: all_solution
+real(sp)                                 :: dd
 
 integer(i4) :: len
-integer(i4) :: i, j, n
+integer(i4) :: i,j,n
 
 ! Final vector of all control points
+
 real(sp), dimension(:), allocatable :: all_cont
 
 ! Hermite cubic quartic spline basis functions
-real(sp)     :: H_00, H_10, H_01, H_11
-real(sp)     :: u, z
+
+real(sp) :: H_00
+real(sp) :: H_01
+real(sp) :: H_10 
+real(sp) :: H_11
+real(sp) :: u,z
+
 integer(i4) :: l
 
 ! Local variables for generating daily values after minmax bound adjustment of all_cont
+
 real(sp), dimension(:), allocatable :: d_new
 real(sp), dimension(:), allocatable :: m_new
+
 integer(i4) :: len_new
 integer(i4) :: slpe_l, slpe_r
 integer(i4) :: k
 
 ! Local variables for max and min bound adjustments
-integer(i4),  dimension(:), allocatable :: d_orig
-logical,       dimension(:), allocatable :: osc_check
-real(sp),      dimension(:), allocatable :: c2
-real(sp),      dimension(:), allocatable :: root
-integer(i4),  dimension(:), allocatable :: root_days
-real(sp)                                 :: perc
+
+integer(i4), dimension(:), allocatable :: d_orig
+logical,     dimension(:), allocatable :: osc_check
+real(sp),    dimension(:), allocatable :: c2
+real(sp),    dimension(:), allocatable :: root
+integer(i4), dimension(:), allocatable :: root_days
+real(sp)                               :: perc
 
 ! Local variables for calculating root of quadratic approximation
-real(sp)      :: diff_yi1
-real(sp)      :: diff_yi
-real(sp)      :: top, bot
-real(sp)      :: root_adj
-integer(i4)  :: count
+
+real(sp)    :: diff_yi1
+real(sp)    :: diff_yi
+real(sp)    :: top, bot
+real(sp)    :: root_adj
+integer(i4) :: count
 
 real(sp) :: del
-real(sp) :: G_00, G_10, G_01, G_11
-real(sp) :: yi, yi1, y2i, y2i1
+
+real(sp) :: G_00
+real(sp) :: G_01
+real(sp) :: G_10
+real(sp) :: G_11
+
+real(sp) :: yi, yi1
+real(sp) :: y2i, y2i1
 real(sp) :: mi, m2i1
 real(sp) :: area_total
 real(sp) :: area_int
 
 ! Local variables for x_new and y_new
+
 real(sp), dimension(:), allocatable :: x_new
 real(sp), dimension(:), allocatable :: y_new
-real(sp)      :: kk
-integer(i4)  :: nn, mm
 
+real(sp)    :: kk
+integer(i4) :: nn, mm
 
 !------------------
 ! PART 1: Determine all wall and mid control points
 !------------------
 
 ! Start of the spline routine
+
 len = size(monthdata)
 
 allocate(fmc(len+2))
@@ -2252,6 +2277,7 @@ allocate(m(len+2))
 
 !------
 ! Define first mid-control point as equal to original monthdata
+
 fmc(1) = monthdata(1)
 fmc(2:(len+1)) = monthdata(1:len)
 fmc(len+2) = monthdata(len)
@@ -2300,12 +2326,10 @@ do i = 1, (len+1)
 
 end do
 
-
 !---
 ! Ensure smooth monotonic interpolation between control points
 
 ! call monocheck(d,m)
-
 
 !------
 ! Calculate "second" wall control based on interception of Hermite functions
@@ -2325,9 +2349,9 @@ do i = 1, (len+1)
 
 end do
 
-
 !------
 ! Compile the NxN linear matrix to adjust mid-control points
+
 allocate(mat(len,len))
 allocate(indx(len))
 allocate(solution(len))
@@ -2345,7 +2369,6 @@ G_11 = (u**3) * (3*u - 4.) / 12.
 
 mat = 0.
 
-
 ! Consider two "midpoints" outside of first and last interval
 mat(1,1) = 0.5 * G_10 + G_01 + G_00 - 0.5 * G_11 + 1.
 mat(1,2) = 0.5 * G_11
@@ -2353,8 +2376,8 @@ mat(1,2) = 0.5 * G_11
 mat(len,len-1) = -0.5 * G_10
 mat(len,len)   = 0.5 * G_10 + G_01 + G_00 - 0.5 * G_11 + 1.
 
-
 n = 1
+
 do i = 2, (len-1)
 
   mat(i,n)   = -0.5 * G_10
@@ -2373,22 +2396,21 @@ solution(1)   = 2. * monthdata(1) - swc(1) * G_00 - 0.5 * (swc(2) - swc(1)) * G_
 
 solution(len) =  2. * monthdata(len) - swc(len) * G_00 - 0.5 * (swc(len+1) - swc(len)) * G_11 - 0.5 * (swc(len+1) - swc(len)) * G_10 - swc(len+1) * G_01 - swc(len) - 0.5 * G_11 * monthdata(len)
 
-
 do i = 2, (len-1)
 
   solution(i) = 2. * monthdata(i) - swc(i) * G_00 - 0.5 * (swc(i+1) - swc(i)) * G_11 - 0.5 * (swc(i+1) - swc(i)) * G_10 - swc(i+1) * G_01 - swc(i)
 
 end do
 
-
 ! Solve linear system to get final mid control points
+
 call ludcmp(mat, indx, dd)
 
 call lubksb(mat, indx, solution)
 
-
 !------
 ! Compile "second" wall control with newly adjusted mid control points (all_cont)
+
 allocate(all_solution(len+2))
 
 all_solution(1)       = monthdata(1)
@@ -2412,15 +2434,11 @@ end do
 
 all_cont(size(all_cont)) = swc(size(swc))
 
-
-
 !------------------
 ! PART 2: Adjust monotonicty using the tridiagonal equation
 !------------------
 
 call mono_adjust(monthdata, all_cont)
-
-
 
 !------------------
 ! PART 3: Adjustment to maximum and minimum bound
@@ -2438,9 +2456,9 @@ c2 = -9999.
 root = -9999.
 root_days = -9999
 
-
 !------
 ! Assign -1 for negative slope, 1 for postive and 0 for turning point
+
 do i = 2, (len-1)
 
   if ((monthdata(i+1) - monthdata(i)) < 0) then
@@ -2467,9 +2485,9 @@ do i = 2, (len-1)
 
 end do
 
-
 !------
 ! Assign TRUE if oscillation of turning point exceeds the predetermined threshold
+
 perc = plim / 100.
 
 do i = 2, (len-1)
@@ -2496,9 +2514,9 @@ do i = 2, (len-1)
 
 end do
 
-
 !------
 ! Calculate the amount of adjustment required and insert into the c2 variable
+
 do i = 2, (len-1)
 
   if (osc_check(i)  .and. monthdata(i) > 0) then
@@ -2553,10 +2571,9 @@ do i = 2, (len-1)
 
 end do
 
-
-
 !------
 ! Calculate the root deviation based on c2 and triangular approximation
+
 count = 0 ! Count the number of extra Hermite spline segments required
 
 do i = 2, (len-1)
@@ -2647,10 +2664,9 @@ do i = 2, (len-1)
 
 end do
 
-
-
 !------
 ! Re-estimate c2 based on integral area under Hermite spline
+
 do i = 1, (len-1)
 
   if(osc_check(i) ) then
@@ -2695,9 +2711,9 @@ do i = 1, (len-1)
 
 end do
 
-
 !------
 ! Generate x_new and y_new series that contains the extra quadratic adjusted segments
+
 allocate(x_new((2*len)+2+count))
 allocate(y_new((2*len)+2+count))
 
@@ -2749,8 +2765,6 @@ end do
 x_new(nn) = kk
 y_new(nn) = all_cont(mm)
 
-
-
 !------
 ! Construct the spline for daily values based on all_cont
 len_new = size(x_new)
@@ -2801,7 +2815,6 @@ do i = 1, (len_new-1)
 
 end do
 
-
 !------
 ! Reassign quadratic approximation slopes and original slopes to adjusted intervals
 
@@ -2833,12 +2846,10 @@ do i = 2, (len-1)
 
 end do
 
-
 !---
 ! Ensure smooth monotonic interpolation between control points
 
 call monocheck(d_new, m_new)
-
 
 !------
 !Assign the daily value based on sequence
@@ -2919,25 +2930,25 @@ do i = 1, len !outer loop start, for all monthly intervals N
 
 end do !end of outer loop
 
-
 end subroutine newspline_bound_all
 
-
-
-
 !-------------------------------------------------------------------------------
+
 subroutine monocheck(d,m)
 
 implicit none
+
 real(sp), dimension(:), intent(in)    :: d
 real(sp), dimension(:), intent(inout) :: m
 
 !Local variables for adjusting monotonicity
-real(sp), dimension(:), allocatable :: a, b, r
+real(sp), dimension(:), allocatable :: a,b,r
 real(sp), dimension(:), allocatable :: check
-integer :: len, i
+
+integer(i4) :: len, i
 
 !---
+
 len = size(m)
 
 allocate(a(len-1))
@@ -2995,22 +3006,25 @@ end do
 
 end subroutine monocheck
 
-
-
-
 !-------------------------------------------------------------------------------
 subroutine days_even(nk,y_val,m_val,daydata)
 
 implicit none
-integer               , intent(in)    :: nk
+
+integer(i4),            intent(in)    :: nk
 real(sp), dimension(:), intent(in)    :: y_val, m_val ! Take in three control points
-!integer               , intent(in)    :: n
+!integer(i4),           intent(in)    :: n
 real(sp), dimension(:), intent(inout) :: daydata
 
 ! Local variable for generating day fraction from [0,1] for Hermite curve
-integer :: int_len ! Interval lenght (no. of days)
-integer :: i, n
-real(sp) :: H_00, H_01, H_10, H_11
+integer(i4) :: int_len ! Interval lenght (no. of days)
+integer(i4) :: i,n
+
+real(sp) :: H_00
+real(sp) :: H_01
+real(sp) :: H_10 
+real(sp) :: H_11
+
 real(sp) :: u
 
 !------
@@ -3054,24 +3068,31 @@ end do
 
 end subroutine days_even
 
-
-
 !-------------------------------------------------------------------------------
+
 subroutine days_odd(nk,y_val,m_val,daydata)
 
 implicit none
-integer               , intent(in)    :: nk
+
+integer(i4),            intent(in)    :: nk
 real(sp), dimension(:), intent(in)    :: y_val, m_val ! Take in three control points
-!integer               , intent(inout) :: n
+!integer(i4),           intent(inout) :: n
 real(sp), dimension(:), intent(inout) :: daydata
 
 ! Local variable for generating day fraction from [0,1] for Hermite curve
-integer :: int_len ! Interval lenght (no. of days)
-integer :: i, n
-real(sp) :: H_00, H_01, H_10, H_11
+
+integer(i4) :: int_len ! Interval lenght (no. of days)
+integer(i4) :: i,n
+
+real(sp) :: H_00
+real(sp) :: H_01
+real(sp) :: H_10 
+real(sp) :: H_11
+
 real(sp) :: u
 
 !------
+
 u = 1. / nk
 
 n = 1
@@ -3112,27 +3133,32 @@ end do
 
 end subroutine days_odd
 
-
-
 !-------------------------------------------------------------------------------
+
 subroutine days_osc_even(nk,root_days,root,y_val,m_val,daydata)
 
 implicit none
-integer               , intent(in)    :: nk
-integer               , intent(in)    :: root_days
-real(sp)              , intent(in)    :: root
+
+integer(i4),            intent(in)    :: nk
+integer(i4),            intent(in)    :: root_days
+real(sp),               intent(in)    :: root
 real(sp), dimension(:), intent(in)    :: y_val, m_val ! Take in five control points
-!integer              , intent(inout) :: n
+!integer(i4),           intent(inout) :: n
 real(sp), dimension(:), intent(inout) :: daydata
 
 ! Local variable for generating day fraction from [0,1] for Hermite curve
-!integer :: int_len ! Interval lenght (no. of days)
-integer :: day_insd, day_outsd
-integer :: i, n, num
 
-real(sp) :: H_00, H_01, H_10, H_11
+!integer(i4) :: int_len ! Interval lenght (no. of days)
+integer(i4) :: day_insd
+integer(i4) :: day_outsd
+integer(i4) :: i,n,num
+
+real(sp) :: H_00
+real(sp) :: H_01
+real(sp) :: H_10 
+real(sp) :: H_11
 real(sp) :: del
-real(sp) :: a, b
+real(sp) :: a,b
 real(sp) :: u
 
 !------
@@ -3270,30 +3296,32 @@ do i = 1, day_outsd
 
 end do
 
-
 end subroutine days_osc_even
 
 !-------------------------------------------------------------------------------
 subroutine days_osc_odd(nk,root_days,root,y_val,m_val,daydata)
 
 implicit none
-integer               , intent(in)    :: nk
-integer               , intent(in)    :: root_days
+
+integer(i4)           , intent(in)    :: nk
+integer(i4)           , intent(in)    :: root_days
 real(sp)              , intent(in)    :: root
 real(sp), dimension(:), intent(in)    :: y_val, m_val ! Take in five control points
-!integer              , intent(inout) :: n
+!integer(i4)              , intent(inout) :: n
 real(sp), dimension(:), intent(inout) :: daydata
 
 ! Local variable for generating day fraction from [0,1] for Hermite curve
-!integer :: int_len ! Interval lenght (no. of days)
-integer :: day_insd, day_outsd
-integer :: i, n, num
+!integer(i4) :: int_len ! Interval lenght (no. of days)
+integer(i4) :: day_insd, day_outsd
+integer(i4) :: i, n, num
 
-real(sp) :: H_00, H_01, H_10, H_11
+real(sp) :: H_00
+real(sp) :: H_01
+real(sp) :: H_10 
+real(sp) :: H_11
 real(sp) :: del
-real(sp) :: a, b
+real(sp) :: a,b
 real(sp) :: u
-
 
 !------
 ! LEFT INTERVAL (to the midpoint)
@@ -3370,7 +3398,6 @@ do i = 1, day_insd
 
 end do
 
-
 !------
 ! RIGHT INTERVAL (to the midpoint)
 
@@ -3389,8 +3416,6 @@ a = root - ((real(day_insd) * 2.) / real(nk))
 b = del - ((real(day_outsd) * 2. - 1.) / real(nk))
 
 !print *, a, b, del, root, day_insd, day_outsd
-
-
 
 ! Days inside quadratic partition on RIGHT interval
 num = (2 * day_insd)
@@ -3441,10 +3466,7 @@ do i = 1, day_outsd
 
 end do
 
-
 end subroutine days_osc_odd
-
-
 
 !-------------------------------------------------------------------------------
 subroutine mono_adjust(monthdata, all_cont)
@@ -3455,14 +3477,16 @@ real(sp), dimension(:), intent(in)    :: monthdata
 real(sp), dimension(:), intent(inout) :: all_cont
 
 ! Local variables for checking monotonicity
+
 integer(i4), dimension(:), allocatable :: d_orig
-logical     , dimension(:), allocatable :: slope_check
+logical    , dimension(:), allocatable :: slope_check
 
 ! Local 2x2 matrix system to determine new wall / mid-control points
-real(sp)    , dimension(2,2) :: s_mat
-real(sp)    , dimension(2)   :: s_sol
+
+real(sp)   , dimension(2,2) :: s_mat
+real(sp)   , dimension(2)   :: s_sol
 integer(i4), dimension(2)   :: indx
-real(sp)                     :: dd
+real(sp)                    :: dd
 
 real(sp) :: G_00, G_10, G_01, G_11
 real(sp) :: u
@@ -3513,8 +3537,6 @@ do i = 2, (len-1)
   end if
 
 end do
-
-
 
 !------
 ! Procedures to check monotonicity and adjust mid-control + left/right wall-control accordingly
@@ -3625,23 +3647,23 @@ do i = 2, (len-1)
 
 end do
 
-
 end subroutine mono_adjust
 
-
-
 !-------------------------------------------------------------------------------
+
 subroutine ludcmp(a,indx,d)
+
 ! LU decompose a NxN matrix
+
 implicit none
 
-real(sp),     dimension(:,:), intent(inout) :: a
+real(sp),    dimension(:,:), intent(inout) :: a
 integer(i4), dimension(:),   intent(out)   :: indx
-real(sp),                     intent(out)   :: d
+real(sp),                    intent(out)   :: d
 
 real(sp), dimension(size(a,1)) :: vv
-real(sp), parameter            :: tiny = 1.0e-20_sp
-integer(i4)                   :: j, n, imax
+real(sp), parameter            :: sptiny = tiny(1._sp)
+integer(i4)                    :: j,n,imax
 
 
 n = assert_eq(size(a,1), size(a,2), size(indx), 'ludcmp')
@@ -3666,7 +3688,7 @@ do j = 1, n
 
   indx(j) = imax
 
-  if (a(j,j) == 0.0) a(j,j) = tiny
+  if (a(j,j) == 0.0) a(j,j) = sptiny
 
   a(j+1:n, j) = a(j+1:n, j) / a(j,j)
   a(j+1:n, j+1:n) = a(j+1:n, j+1:n) - outerprod(a(j+1:n, j), a(j,j+1:n))
@@ -3728,20 +3750,21 @@ end subroutine lubksb
 
 subroutine sprsin_sp(a,thresh,sa)  ! FLAG CHECK FOR OPEN SOURCE
 
-use nrutil,   only : arth, assert_eq  ! FLAG REMOVE
 implicit none
 
 real(sp),       dimension(:,:), intent(in)  :: a
 real(sp),                       intent(in)  :: thresh
 type(sprs2_sp),                 intent(out) :: sa
 
-integer(i4)                                  :: n, len
-real(sp),     dimension(:), allocatable       :: vec
-logical(LGT), dimension(:), allocatable       :: mask_vec
-logical(LGT), dimension(size(a,1), size(a,2)) :: mask
-integer                                       :: i
+integer(i4)                              :: n, len
+real(sp), dimension(:), allocatable      :: vec
+logical,  dimension(:), allocatable      :: mask_vec
+logical,  dimension(size(a,1),size(a,2)) :: mask
+integer(i4)                              :: i
 
-n = assert_eq(size(a,1), size(a,2), 'sprsin_sp')
+!----
+
+n = assert_eq(size(a,1),size(a,2),'sprsin_sp')
 
 mask = abs(a) > thresh
 
@@ -3778,20 +3801,19 @@ end subroutine sprsin_sp
 !-------------------------------------------------------------------------------
 subroutine sprsax_sp(sa,x,b)
 
-use nrutil, only : assert_eq, scatter_add  ! FLAG MUST REMOVE
 implicit none
 
 type(sprs2_sp),               intent(in)  :: sa
 real(sp),       dimension(:), intent(in)  :: x
 real(sp),       dimension(:), intent(out) :: b
 
-integer :: ndum
+integer(i4) :: ndum
 
 !----
 
 ndum = assert_eq(sa%n, size(x), size(b), 'sprsax_sp')  ! FLAG REPLACE
 
-b = 0.0_sp
+b = 0._sp
 
 call scatter_add(b, sa%val * x(sa%jcol), sa%irow)
 
@@ -3804,11 +3826,11 @@ subroutine findloc(mat,x,loc)
 implicit none
 
 real(sp), dimension(:), intent(in)  :: mat
-real(sp)              , intent(in)  :: x
-integer(i4)           , intent(out) :: loc
+real(sp),               intent(in)  :: x
+integer(i4),            intent(out) :: loc
 
 real(sp), dimension(:), allocatable :: diff
-integer :: i,len
+integer(i4) :: i,len
 
 !----
 
@@ -3818,7 +3840,7 @@ allocate(diff(len))
 
 diff = abs(mat - x)
 
-loc = minloc(diff)
+loc = minloc(diff,dim=1)
 
 end subroutine findloc
 
