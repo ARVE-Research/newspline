@@ -4,10 +4,10 @@ use iso_fortran_env
 
 implicit none
 
-integer, parameter :: i2 = int16
 integer, parameter :: i4 = int32
 integer, parameter :: sp = real32
-integer, parameter :: dp = real64
+
+! NEED TO CITE/DOCUMENT ALL INCLUSION OF OPEN-SOURCE CODE THAT IS NOT ORIGINAL
 
 ! provide a one-sentence description of each of the subroutines below 
 
@@ -29,7 +29,7 @@ private :: ludcmp       ! FLAG CHECK FOR OPEN SOURCE
 private :: lubksb       ! FLAG CHECK FOR OPEN SOURCE
 private :: sprsin_sp    ! FLAG CHECK FOR OPEN SOURCE
 private :: sprsax_sp    ! FLAG CHECK FOR OPEN SOURCE
-private :: findloc      
+private :: findloc      ! FLAG CHECK FOR OPEN SOURCE
 
 ! COMPOSITE WRAPPER SUBROUTINE : newspline_all
 !---
@@ -1462,59 +1462,73 @@ end subroutine newspline_bound
 subroutine newspline_pbound(monthdata,nk,daydata,plim)
 
 implicit none
-! I/O variables
-real(sp),      dimension(:), intent(in)  :: monthdata
-integer(i4),  dimension(:), intent(in)  :: nk
-real(sp),      dimension(:), intent(out) :: daydata
-real(sp)                   , intent(in)  :: plim !taken in as 0-100%
 
+! I/O variables
+
+real(sp),    dimension(:), intent(in)  :: monthdata
+integer(i4), dimension(:), intent(in)  :: nk
+real(sp),    dimension(:), intent(out) :: daydata
+real(sp),                  intent(in)  :: plim !taken in as 0-100%
 
 ! Local variables for first mid control points
+
 real(sp), dimension(:), allocatable :: fmc
 real(sp), dimension(:), allocatable :: d
 real(sp), dimension(:), allocatable :: m
 
 ! Local variables for second wall control points
+
 real(sp), dimension(:), allocatable :: swc
 
 ! Local variables for linear system of mid control adjustments
-real(sp),     dimension(:,:), allocatable :: mat
+
+real(sp),    dimension(:,:), allocatable :: mat
 integer(i4), dimension(:),   allocatable :: indx
-real(sp),     dimension(:),   allocatable :: solution
-real(sp),     dimension(:),   allocatable :: all_solution
-real(sp)                                  :: dd
+real(sp),    dimension(:),   allocatable :: solution
+real(sp),    dimension(:),   allocatable :: all_solution
+real(sp)                                 :: dd
 
 integer(i4) :: len
 integer(i4) :: i, j, n
 
 ! Hermite cubic spline basis functions
-real(sp)     :: H_00, H_10, H_01, H_11
-real(sp)     :: u, z
+
+real(sp)     :: H_00
+real(sp)     :: H_01
+real(sp)     :: H_10
+real(sp)     :: H_11
+
+real(sp)     :: u,z
 integer(i4) :: l
 
 ! Final vector of all control points
+
 real(sp), dimension(:), allocatable :: all_cont
 
 ! Local variables for generating daily values after minmax bound adjustment of all_cont
+
 real(sp), dimension(:), allocatable :: d_new
 real(sp), dimension(:), allocatable :: m_new
+
 integer(i4) :: len_new
 integer(i4) :: slpe_l, slpe_r
 integer(i4) :: k
 
 ! Local variables for max and min bound adjustments
-integer(i4),  dimension(:), allocatable :: d_orig
-logical,       dimension(:), allocatable :: osc_check
-real(sp),      dimension(:), allocatable :: c2
-real(sp),      dimension(:), allocatable :: root
-integer(i4),  dimension(:), allocatable :: root_days
-real(sp)                                 :: perc
+
+integer(i4), dimension(:), allocatable :: d_orig
+logical,     dimension(:), allocatable :: osc_check
+real(sp),    dimension(:), allocatable :: c2
+real(sp),    dimension(:), allocatable :: root
+integer(i4), dimension(:), allocatable :: root_days
+real(sp)                               :: perc
 
 ! Local variables for calculating root of quadratic approximation
-real(sp)      :: diff_yi1
-real(sp)      :: diff_yi
-real(sp)      :: top, bot
-real(sp)      :: root_adj
+
+real(sp)     :: diff_yi1
+real(sp)     :: diff_yi
+real(sp)     :: top, bot
+real(sp)     :: root_adj
 integer(i4)  :: count
 
 real(sp) :: del
@@ -1535,7 +1549,8 @@ real(sp) :: area_int
 
 real(sp), dimension(:), allocatable :: x_new
 real(sp), dimension(:), allocatable :: y_new
-real(sp)      :: kk
+
+real(sp)     :: kk
 integer(i4)  :: nn, mm
 
 !------------------
@@ -1543,6 +1558,7 @@ integer(i4)  :: nn, mm
 !------------------
 
 ! Start of the spline routine
+
 len = size(monthdata)
 
 allocate(fmc(len+2))
@@ -1717,6 +1733,7 @@ call mono_adjust(monthdata, all_cont)
 !------------------
 ! PART 3: Adjustment to maximum and minimum bound
 !------------------
+
 allocate(d_orig(len))
 allocate(osc_check(len))
 allocate(c2(len))
@@ -2394,6 +2411,7 @@ G_11 = (u**3) * (3*u - 4.) / 12.
 mat = 0.
 
 ! Consider two "midpoints" outside of first and last interval
+
 mat(1,1) = 0.5 * G_10 + G_01 + G_00 - 0.5 * G_11 + 1.
 mat(1,2) = 0.5 * G_11
 
