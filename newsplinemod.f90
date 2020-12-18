@@ -2818,6 +2818,7 @@ real(sp),    dimension(:), intent(in)    :: y_val, m_val ! Take in three control
 real(sp),    dimension(:), intent(inout) :: daydata
 
 ! Local variable for generating day fraction from [0,1] for Hermite curve
+
 integer(i4) :: i,n
 
 real(sp) :: H_00
@@ -2904,12 +2905,14 @@ del = 1 - root
 
 !------
 ! LEFT INTERVAL (to the midpoint)
+
 a = del - ((real(day_outsd) * 2. - 1.) / real(nk))
 
 b = root - ((real(day_insd) * 2. - 1.) / real(nk))
 
 !------
 ! Start with days outside quadratic partition on LEFT interval
+
 n = 1
 
 num = (2 * day_outsd) - 1
@@ -2933,6 +2936,7 @@ end do
 
 !---
 ! Days inside the quadratic partition on LEFT interval
+
 num = (2 * day_insd) - 1
 
 u = b / root
@@ -3104,6 +3108,7 @@ a = root - ((real(day_insd) * 2.) / real(nk))
 b = del - ((real(day_outsd) * 2. - 1.) / real(nk))
 
 ! Days inside quadratic partition on RIGHT interval
+
 num = (2 * day_insd)
 
 u = (2. / real(nk)) / root
