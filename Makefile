@@ -1,7 +1,7 @@
 # makefile for spline interpolation comparisons and timing (Lai & Kaplan, 2020)
 
 FC=gfortran
-FCFLAGS  = -ffree-form -ffree-line-length-none
+FCFLAGS  = -pedantic
 
 #---------------------------------------------
 

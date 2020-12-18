@@ -1729,10 +1729,12 @@ end do
 
 !---
 ! Ensure smooth monotonic interpolation between control points
+
 call monocheck(d_new, m_new)
 
 !------
 !Assign the daily value based on sequence
+
 n = 1
 k = 1
 
@@ -1991,17 +1993,21 @@ end do
 
 !---
 
-solution(1)   = 2. * monthdata(1) - swc(1) * G_00 - 0.5 * (swc(2) - swc(1)) * G_11 - 0.5 * (swc(2) - swc(1)) * G_10 - swc(2) * G_01 - swc(1) + 0.5 * G_10 * monthdata(1)
+solution(1) = 2. * monthdata(1) - swc(1) * G_00 - 0.5 * (swc(2) - swc(1)) * G_11 - 0.5 * (swc(2) - swc(1)) * G_10 - swc(2) *   &
+                G_01 - swc(1) + 0.5 * G_10 * monthdata(1)
 
-solution(len) =  2. * monthdata(len) - swc(len) * G_00 - 0.5 * (swc(len+1) - swc(len)) * G_11 - 0.5 * (swc(len+1) - swc(len)) * G_10 - swc(len+1) * G_01 - swc(len) - 0.5 * G_11 * monthdata(len)
+solution(len) = 2. * monthdata(len) - swc(len) * G_00 - 0.5 * (swc(len+1) - swc(len)) * G_11 - 0.5 * (swc(len+1) - swc(len)) *  &
+                  G_10 - swc(len+1) * G_01 - swc(len) - 0.5 * G_11 * monthdata(len)
 
 do i = 2, (len-1)
 
-  solution(i) = 2. * monthdata(i) - swc(i) * G_00 - 0.5 * (swc(i+1) - swc(i)) * G_11 - 0.5 * (swc(i+1) - swc(i)) * G_10 - swc(i+1) * G_01 - swc(i)
+  solution(i) = 2. * monthdata(i) - swc(i) * G_00 - 0.5 * (swc(i+1) - swc(i)) * G_11 - 0.5 * (swc(i+1) - swc(i)) *    &
+                  G_10 - swc(i+1) * G_01 - swc(i)
 
 end do
 
 ! Solve linear system to get final mid control points
+
 call matsol(mat, solution)
 
 !------
@@ -2014,6 +2020,7 @@ all_solution(2:len+1) = solution
 all_solution(len+2)   = monthdata(len)
 
 !---
+
 allocate(all_cont(size(swc)+size(all_solution)))
 
 n = 1
@@ -2054,6 +2061,7 @@ root_days = -9999
 
 !------
 ! Assign -1 for negative slope, 1 for postive and 0 for turning point
+
 do i = 2, (len-1)
 
   if ((monthdata(i+1) - monthdata(i)) < 0) then
@@ -2082,6 +2090,7 @@ end do
 
 !------
 ! Assign TRUE if oscillation of turning point exceeds the predetermined threshold
+
 perc = plim / 100.
 
 do i = 2, (len-1)
@@ -2110,6 +2119,7 @@ end do
 
 !------
 ! Calculate the amount of adjustment required and insert into the c2 variable
+
 do i = 2, (len-1)
 
   if (osc_check(i)  .and. monthdata(i) > 0) then
@@ -2166,6 +2176,7 @@ end do
 
 !------
 ! Calculate the root deviation based on c2 and triangular approximation
+
 count = 0 ! Count the number of extra Hermite spline segments required
 
 do i = 2, (len-1)
@@ -2240,11 +2251,13 @@ end do
 
 !------
 ! Re-estimate c2 based on integral area under Hermite spline
+
 do i = 1, (len-1)
 
   if(osc_check(i) ) then
 
     !--- Construct fourth degree Hermite at u = 1 (integral [0,1])
+    
     del = 1 - root(i)
 
     u = 1.
@@ -2255,16 +2268,19 @@ do i = 1, (len-1)
     G_11 = (u**3) * (3.*u - 4.) / 12.
 
     !--- Assign local control points
+    
     yi   = all_cont((2*i)-1)
     yi1  = monthdata(i)
     y2i  = monthdata(i)
     y2i1 = all_cont((2*i)+1)
 
     !--- Assign local slope
+    
     mi   = ((yi - all_cont((2*i)-2)) / 1. + (all_cont(2*i) - yi) / 1.) / 2.
     m2i1 = ((all_cont((2*i)+2) - y2i1) / 1. + (y2i1 - all_cont(2*i)) / 1.) / 2.
 
     !--- Calculate new area approximation based on Hermite intergral
+    
     area_total = 2. * del * monthdata(i)
 
     top = (G_00 * yi) + (G_10 * del * mi) + (G_01 * yi1) + (G_00 * y2i) + (G_01 * y2i1) + (G_11 * del * m2i1)
@@ -2273,6 +2289,7 @@ do i = 1, (len-1)
     area_int = (area_total - del * (top + yi + y2i)) / bot
 
     !--- Re-assign c2 as the integral-estimated value
+    
     c2(i) = (3. * area_int) / (4. * root(i))
 
   end if
@@ -2281,6 +2298,7 @@ end do
 
 !------
 ! Generate x_new and y_new series that contains the extra quadratic adjusted segments
+
 allocate(x_new((2*len)+2+count))
 allocate(y_new((2*len)+2+count))
 
@@ -2334,6 +2352,7 @@ y_new(nn) = all_cont(mm)
 
 !------
 ! Construct the spline for daily values based on all_cont
+
 len_new = size(x_new)
 
 allocate(d_new(len_new-1))
@@ -2353,6 +2372,7 @@ do i = 2, (len_new-1)
 
   !---
   ! Monotonic adjustment to slope
+  
   if(d_new(i-1) > 0 .and. d_new(i) < 0) then
 
     m_new(i) = 0
@@ -2410,10 +2430,12 @@ end do
 
 !---
 ! Ensure smooth monotonic interpolation between control points
+
 call monocheck(d_new, m_new)
 
 !------
 !Assign the daily value based on sequence
+
 n = 1
 k = 1
 
@@ -2479,6 +2501,7 @@ real(sp), dimension(:), intent(in)    :: d
 real(sp), dimension(:), intent(inout) :: m
 
 !Local variables for adjusting monotonicity
+
 real(sp), dimension(:), allocatable :: a,b,r
 real(sp), dimension(:), allocatable :: check
 
@@ -2648,7 +2671,8 @@ do i = 2, (len-1)
 
   if (.not.slope_check(i)) then
 
-    if ((d_orig(i) == 1 .and. (all_cont(2*i) - all_cont(2*i-1)) < 0.) .OR. (d_orig(i) == -1 .and. (all_cont(2*i) - all_cont(2*i-1)) > 0))  then
+    if ((d_orig(i) == 1 .and. (all_cont(2*i) - all_cont(2*i-1)) < 0.) .or.   &
+       (d_orig(i) == -1 .and. (all_cont(2*i) - all_cont(2*i-1)) > 0))  then
 
       all_cont(2*i) = monthdata(i)
 
@@ -2662,8 +2686,11 @@ do i = 2, (len-1)
 
       !---
 
-      s_sol(1) = 2 * monthdata(i) - (G_00 - 0.5 * G_10 - 0.5 * G_11 + 1) * all_cont(2*i-1) + 0.5 * G_10 * all_cont(2*i-2) - (G_00 + G_01 + 0.5 * G_10 - 0.5 * G_11 + 1.) * all_cont(2*i)
-      s_sol(2) = 2 * monthdata(i+1) - (G_01 + 0.5 * G_10 + 0.5 * G_11) * all_cont(2*i+3) + 0.5 * G_10 * all_cont(2*i) - 0.5 * G_11 * all_cont(2*i+4)
+      s_sol(1) = 2. * monthdata(i) - (G_00 - 0.5 * G_10 - 0.5 * G_11 + 1) * all_cont(2*i-1) + 0.5 * G_10 * all_cont(2*i-2) -   &
+                  (G_00 + G_01 + 0.5 * G_10 - 0.5 * G_11 + 1.) * all_cont(2*i)
+      
+      s_sol(2) = 2. * monthdata(i+1) - (G_01 + 0.5 * G_10 + 0.5 * G_11) * all_cont(2*i+3) + 0.5 * G_10 * all_cont(2*i) -   &
+                   0.5 * G_11 * all_cont(2*i+4)
 
       !---
 
@@ -2677,7 +2704,8 @@ do i = 2, (len-1)
 
       !---
 
-    else if ((d_orig(i) == 1 .and. (all_cont(2*i+1) - all_cont(2*i)) < 0.) .OR. (d_orig(i) == -1 .and. (all_cont(2*i+1) - all_cont(2*i)) > 0))  then
+    else if ((d_orig(i) == 1 .and. (all_cont(2*i+1) - all_cont(2*i)) < 0.) .OR. (d_orig(i) == -1 .and.   &
+           (all_cont(2*i+1) - all_cont(2*i)) > 0))  then
 
       all_cont(2*i) = monthdata(i)
 
@@ -2691,8 +2719,11 @@ do i = 2, (len-1)
 
       !---
 
-      s_sol(1) = 2 * monthdata(i-1) - (G_00 - 0.5 * G_10 - 0.5 * G_11 + 1.) * all_cont(2*i-3) + 0.5 * G_10 * all_cont(2*i-4) - 0.5 * G_11 * all_cont(2*i)
-      s_sol(2) = 2 * monthdata(i) - (G_01 + 0.5 * G_10 + 0.5 * G_11) * all_cont(2*i+1) - (G_00 + G_01 + 0.5 * G_10 - 0.5 * G_11 + 1.) * all_cont(2*i) - 0.5 * G_11 * all_cont(2*i+2)
+      s_sol(1) = 2 * monthdata(i-1) - (G_00 - 0.5 * G_10 - 0.5 * G_11 + 1.) * all_cont(2*i-3) + 0.5 * G_10 * all_cont(2*i-4) -   &
+                                       0.5 * G_11 * all_cont(2*i)
+
+      s_sol(2) = 2 * monthdata(i) - (G_01 + 0.5 * G_10 + 0.5 * G_11) * all_cont(2*i+1) -   &
+                                    (G_00 + G_01 + 0.5 * G_10 - 0.5 * G_11 + 1.) * all_cont(2*i) - 0.5 * G_11 * all_cont(2*i+2)
 
       !---
 
@@ -2923,11 +2954,13 @@ end do
 
 !------
 ! RIGHT INTERVAL (to the midpoint)
+
 a = root - ((real(day_insd) * 2. - 1.) / real(nk))
 
 b = del - ((real(day_outsd) * 2. - 1.) / real(nk))
 
 ! Days inside quadratic partition on RIGHT interval
+
 num = (2 * day_insd) - 1
 
 u = (1. / nk) / root
@@ -2949,6 +2982,7 @@ end do
 
 !---
 ! Days outside the quadratic partition on RIGHT interval
+
 num = (2 * day_outsd) - 1
 
 u = b / del
@@ -2983,6 +3017,7 @@ real(sp), dimension(:), intent(in)    :: y_val, m_val ! Take in five control poi
 real(sp), dimension(:), intent(inout) :: daydata
 
 ! Local variable for generating day fraction from [0,1] for Hermite curve
+
 integer(i4) :: day_insd, day_outsd
 integer(i4) :: i, n, num
 
@@ -2996,6 +3031,7 @@ real(sp) :: u
 
 !------
 ! LEFT INTERVAL (to the midpoint)
+
 day_insd = root_days !+ 1
 
 day_outsd = ((nk+1) / 2) - day_insd
@@ -3010,6 +3046,7 @@ b = root - ((real(day_insd) * 2. - 2.) / real(nk))
 
 !------
 ! Start with days outside quadratic partition on LEFT interval
+
 n = 1
 
 num = (2 * day_outsd) - 1
@@ -3033,6 +3070,7 @@ end do
 
 !---
 ! Days inside the quadratic partition on LEFT interval
+
 num = (2 * day_insd) - 2
 
 u = b / root
@@ -3054,6 +3092,7 @@ end do
 
 !------
 ! RIGHT INTERVAL (to the midpoint)
+
 day_insd = root_days - 1
 
 day_outsd = ((nk-1) / 2) - day_insd
@@ -3086,6 +3125,7 @@ end do
 
 !---
 ! Days outside the quadratic partition on RIGHT interval
+
 num = (2 * day_outsd) - 1
 
 u = b / del
