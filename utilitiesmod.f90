@@ -1,20 +1,20 @@
 module utilitiesmod
 
-use parametersmod
+use parametersmod, only : sp,dp
 
 implicit none
-
 
 public :: matsol
 public :: findloc
 
-
 contains
+
+! ------------------------------------------------------------------------------------------------------------------
 
 subroutine matsol(mat,sol)
 
 ! Provides matrix solution to X matrix in a A * X = B system using LU decomposition
-! Code adpated from Press et al. (1996) Numerical Recipes in Fortran 90 : The Art of Parallel Scientific Computing
+! Code adapted from Press et al. (1996) Numerical Recipes in Fortran 90 : The Art of Parallel Scientific Computing
 ! 2nd Edition (P.1016-1017)
 
 implicit none
@@ -33,6 +33,8 @@ real(sp)   , parameter      :: tiny_sp = 1.0e-38_sp
 integer(i4)                 :: i, n, k, ll
 integer(i4)                 :: max
 real(sp)                    :: summ
+
+! ----------------------------------
 
 n = size(sol)
 
@@ -102,15 +104,15 @@ do i = n, 1, -1
 
 end do
 
-
 end subroutine matsol
 
-
-!-------------------------------------------------------------------------------
+! -------------------------------------------------------------------------------
 
 subroutine findloc(mat,x,loc)
 
-! Find location of a specified value
+! returns the index (loc) of a value (x) in a 1D array (mat)
+! adapted from Press et al. (1996) Numerical Recipes in Fortran 90 : The Art of Parallel Scientific Computing
+! 2nd Edition
 
 implicit none
 
@@ -133,7 +135,6 @@ loc = minloc(diff,dim=1)
 
 end subroutine findloc
 
-!-------------------------------------------------------------------------------
-
+! ------------------------------------------------------------------------------------------------------------------
 
 end module utilitiesmod

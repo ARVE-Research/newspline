@@ -1,28 +1,30 @@
 module newsplinemod
 
-use parametersmod,  only : i4, sp
-use utilitiesmod,   only : matsol, findloc
+! this is newspline, a fast, means-preserving spline for interval data
+! Leo O Lai and Jed O. Kaplan
+! 2020
+
+use parametersmod, only : i4,sp
+use utilitiesmod,  only : matsol,findloc
 
 implicit none
 
-
-public  :: newspline_all            ! Wrapper subroutine with all optional arguments
-private :: newspline                ! Subroutine of newspline base function with no optional arguments
-private :: newspline_bound          ! Subroutine with absolute upper and lower limit options
-private :: newspline_pbound         ! Subroutine with percentage limit option
-private :: newspline_bound_all      ! Subroutine with both absolute and percentage limit options
-private :: monocheck                ! Monotonicity check subroutine for each control point
-private :: mono_adjust              ! Adjustment subroutine for un-monotonic control points
-private :: days_even                ! Subroutine to calculate Hermite cubic values with even number of partitions
-private :: days_odd                 ! Subroutine to calculate Hermite cubic values with odd number of partitions
-private :: days_osc_even            ! Subroutine to calculate Hermite cubic values with even number of partitions in intervals adjusted for oscillation
-private :: days_osc_odd             ! Subroutine to calculate Hermite cubic values with odd number of partitions in intervals adjusted for oscillation
-
+public  :: newspline_all        ! Wrapper subroutine with all optional arguments
+private :: newspline            ! Subroutine of newspline base function with no optional arguments
+private :: newspline_bound      ! Subroutine with absolute upper and lower limit options
+private :: newspline_pbound     ! Subroutine with percentage limit option
+private :: newspline_bound_all  ! Subroutine with both absolute and percentage limit options
+private :: monocheck            ! Monotonicity check subroutine for each control point
+private :: mono_adjust          ! Adjustment subroutine for un-monotonic control points
+private :: days_even            ! calculates Hermite cubic values with even number of partitions
+private :: days_odd             ! calculates Hermite cubic values with odd number of partitions
+private :: days_osc_even        ! calculates Hermite cubic values with even number of partitions in intervals adjusted for oscillation
+private :: days_osc_odd         ! calculates Hermite cubic values with odd number of partitions in intervals adjusted for oscillation
 
 contains
 
-!-------------------------------------------------------------------------------
-! wrapper subroutine with all optional arguments
+! ------------------------------------------------------------------------------------------------------------------
+
 subroutine newspline_all(monthdata,nk,daydata,llim,ulim,plim,prec)
 
 ! COMPOSITE WRAPPER SUBROUTINE : newspline_all
@@ -130,8 +132,7 @@ end if
 
 end subroutine newspline_all
 
-
-!-------------------------------------------------------------------------------
+! ------------------------------------------------------------------------------------------------------------------
 
 subroutine newspline(monthdata,nk,daydata)
 
@@ -162,16 +163,22 @@ real(sp), dimension(:), allocatable :: d_cont
 real(sp), dimension(:), allocatable :: m_cont
 
 ! Hermite cubic and quartic spline basis functions
-real(sp) :: H_00, H_10, H_01, H_11
-real(sp) :: G_00, G_10, G_01, G_11
+real(sp) :: H_00
+real(sp) :: H_01
+real(sp) :: H_10
+real(sp) :: H_11
+real(sp) :: G_00
+real(sp) :: G_01
+real(sp) :: G_10
+real(sp) :: G_11
 real(sp) :: u,z
 
 integer(i4) :: len, len_cont
 integer(i4) :: i, j, k, n
 
-
 !----------------------------------------------------------------
 ! Start of the newspline routine
+
 len = size(monthdata)
 
 allocate(fmc(len+2))
@@ -215,7 +222,6 @@ end do
 m(1)     = (d(1) + 0.) / 2.
 m(len+2) = (d(len+1) + 0.) / 2.
 
-
 do i = 1, (len+1)
 
   if(d(i) == 0) then
@@ -226,7 +232,6 @@ do i = 1, (len+1)
   end if
 
 end do
-
 
 !------
 ! Calculate wall control based on interception of Hermite functions
@@ -244,7 +249,6 @@ do i = 1, (len+1)
   swc(i) = (fmc(i) * H_00) + (m(i) * H_10) + (fmc(i+1) * H_01) + (m(i+1) * H_11)
 
 end do
-
 
 !------
 ! Generate matrix for final adjustments to mid-control points
@@ -272,6 +276,7 @@ mat(len,len-1) = -0.5 * G_10
 mat(len,len)   = 0.5 * G_10 + G_01 + G_00 - 0.5 * G_11 + 1.
 
 n = 1
+
 do i = 2, (len-1)
 
   mat(i,n)   = -0.5 * G_10
@@ -286,24 +291,30 @@ end do
 
 !---
 
-solution(1)   = 2. * monthdata(1) - swc(1) * G_00 - 0.5 * (swc(2) - swc(1)) * G_11 - 0.5 * (swc(2) - swc(1)) * G_10 - swc(2) * G_01 - swc(1)
+solution(1)   = 2. * monthdata(1) - swc(1) * G_00 - 0.5 * (swc(2) - swc(1)) * G_11 -    &
+               0.5 * (swc(2) - swc(1)) * G_10 - swc(2) * G_01 - swc(1)
+
 solution(1)   = solution(1) + 0.5 * G_10 * monthdata(1)
 
-solution(len) =  2. * monthdata(len) - swc(len) * G_00 - 0.5 * (swc(len+1) - swc(len)) * G_11 - 0.5 * (swc(len+1) - swc(len)) * G_10 - swc(len+1) * G_01 - swc(len)
+solution(len) =  2. * monthdata(len) - swc(len) * G_00 - 0.5 * (swc(len+1) - swc(len)) * G_11 -   &
+                0.5 * (swc(len+1) - swc(len)) * G_10 - swc(len+1) * G_01 - swc(len)
+
 solution(len) = solution(len) - 0.5 * G_11 * monthdata(len)
 
 do i = 2, (len-1)
 
-  solution(i) = 2. * monthdata(i) - swc(i) * G_00 - 0.5 * (swc(i+1) - swc(i)) * G_11 - 0.5 * (swc(i+1) - swc(i)) * G_10 - swc(i+1) * G_01 - swc(i)
+  solution(i) = 2. * monthdata(i) - swc(i) * G_00 - 0.5 * (swc(i+1) - swc(i)) * G_11 - 0.5 * (swc(i+1) - swc(i)) *   &
+                     G_10 - swc(i+1) * G_01 - swc(i)
 
 end do
 
 ! Solve linear system to get final mid control points
-call matsol(mat, solution)
 
+call matsol(mat,solution)
 
 !------
 ! Compile wall control with newly adjusted mid control points (all_cont)
+
 allocate(all_solution(len+2))
 
 all_solution(1)       = monthdata(1)
@@ -325,9 +336,9 @@ do i = 1, size(swc)
 
 end do
 
-
 !------
 ! Construct the spline for daily values based on all_cont
+
 len_cont = size(all_cont)
 
 allocate(d_cont(len_cont-1))
@@ -347,7 +358,6 @@ do i = 1, (len_cont-2)
 
 end do
 
-
 do i = 2, (len_cont-3)
 
   if(d_cont(i) == 0) then
@@ -359,9 +369,9 @@ do i = 2, (len_cont-3)
 
 end do
 
-
 !------
 !Assign the daily value based on sequence
+
 n = 1
 k = 1
 
@@ -451,8 +461,8 @@ end do !end of outer loop
 
 end subroutine newspline
 
+! ------------------------------------------------------------------------------------------------------------------
 
-!-------------------------------------------------------------------------------
 subroutine newspline_bound(monthdata,nk,daydata,llim,ulim)
 
 implicit none
@@ -526,7 +536,6 @@ real(sp), dimension(:), allocatable :: y_new
 real(sp)    :: kk
 integer(i4) :: nn, mm
 
-
 !------------------
 ! PART 1: Determine all wall and mid control points
 !------------------
@@ -576,7 +585,6 @@ end do
 m(1)     = d(1)
 m(len+2) = d(len+1)
 
-
 do i = 1, (len+1)
 
   if(d(i) == 0) then
@@ -587,7 +595,6 @@ do i = 1, (len+1)
   end if
 
 end do
-
 
 !------
 ! Calculate "second" wall control based on interception of Hermite functions
@@ -605,7 +612,6 @@ do i = 1, (len+1)
   swc(i) = (fmc(i) * H_00) + (m(i) * H_10) + (fmc(i+1) * H_01) + (m(i+1) * H_11)
 
 end do
-
 
 !------
 ! Compile the NxN linear matrix to adjust mid-control points
@@ -625,14 +631,12 @@ G_11 = (u**3) * (3*u - 4.) / 12.
 
 mat = 0.
 
-
 ! Consider two "midpoints" outside of first and last interval
 mat(1,1) = 0.5 * G_10 + G_01 + G_00 - 0.5 * G_11 + 1.
 mat(1,2) = 0.5 * G_11
 
 mat(len,len-1) = -0.5 * G_10
 mat(len,len)   = 0.5 * G_10 + G_01 + G_00 - 0.5 * G_11 + 1.
-
 
 n = 1
 do i = 2, (len-1)
@@ -649,21 +653,21 @@ end do
 
 !---
 
-solution(1)   = 2. * monthdata(1) - swc(1) * G_00 - 0.5 * (swc(2) - swc(1)) * G_11 - 0.5 * (swc(2) - swc(1)) * G_10 - swc(2) * G_01 - swc(1) + 0.5 * G_10 * monthdata(1)
+solution(1) = 2. * monthdata(1) - swc(1) * G_00 - 0.5 * (swc(2) - swc(1)) * G_11 - 0.5 * (swc(2) - swc(1)) * G_10 - swc(2) *    &
+                  G_01 - swc(1) + 0.5 * G_10 * monthdata(1)
 
-solution(len) =  2. * monthdata(len) - swc(len) * G_00 - 0.5 * (swc(len+1) - swc(len)) * G_11 - 0.5 * (swc(len+1) - swc(len)) * G_10 - swc(len+1) * G_01 - swc(len) - 0.5 * G_11 * monthdata(len)
-
+solution(len) = 2. * monthdata(len) - swc(len) * G_00 - 0.5 * (swc(len+1) - swc(len)) * G_11 - 0.5 * (swc(len+1) - swc(len)) *   &
+                   G_10 - swc(len+1) * G_01 - swc(len) - 0.5 * G_11 * monthdata(len)
 
 do i = 2, (len-1)
 
-  solution(i) = 2. * monthdata(i) - swc(i) * G_00 - 0.5 * (swc(i+1) - swc(i)) * G_11 - 0.5 * (swc(i+1) - swc(i)) * G_10 - swc(i+1) * G_01 - swc(i)
+  solution(i) = 2. * monthdata(i) - swc(i) * G_00 - 0.5 * (swc(i+1) - swc(i)) * G_11 - 0.5 * (swc(i+1) - swc(i)) *    &
+                  G_10 - swc(i+1) * G_01 - swc(i)
 
 end do
 
-
 ! Solve linear system to get final mid control points
 call matsol(mat, solution)
-
 
 !------
 ! Compile "second" wall control with newly adjusted mid control points (all_cont)
@@ -690,15 +694,11 @@ end do
 
 all_cont(size(all_cont)) = swc(size(swc))
 
-
-
 !------------------
 ! PART 2: Adjust monotonicty using the tridiagonal equation
 !------------------
 
 call mono_adjust(monthdata, all_cont)
-
-
 
 !------------------
 ! PART 3: Adjustment to maximum and minimum bound
@@ -716,9 +716,9 @@ c2 = -9999.
 root = -9999.
 root_days = -9999
 
-
 !------
 ! Assign -1 for negative slope, 1 for postive and 0 for turning point
+
 do i = 2, (len-1)
 
   if ((monthdata(i+1) - monthdata(i)) < 0) then
@@ -745,9 +745,9 @@ do i = 2, (len-1)
 
 end do
 
-
 !------
 ! Assign TRUE if oscillation of turning point exceeds the predetermined threshold
+
 do i = 2, (len-1)
 
   !j = 2 * i
@@ -772,9 +772,9 @@ do i = 2, (len-1)
 
 end do
 
-
 !------
 ! Calculate the amount of adjustment required and insert into the c2 variable
+
 do i = 2, (len-1)
 
   if (osc_check(i) .and. monthdata(i) > 0) then
@@ -789,9 +789,9 @@ do i = 2, (len-1)
 
 end do
 
-
 !------
 ! Calculate the root deviation based on c2 and triangular approximation
+
 count = 0 ! Count the number of extra Hermite spline segments required
 
 do i = 2, (len-1)
@@ -870,10 +870,9 @@ do i = 2, (len-1)
 
 end do
 
-
-
 !------
 ! Re-estimate c2 based on integral area under Hermite spline
+
 do i = 1, (len-1)
 
   if(osc_check(i) ) then
@@ -972,7 +971,6 @@ end do
 x_new(nn) = kk
 y_new(nn) = all_cont(mm)
 
-
 !------
 ! Construct the spline for daily values based on all_cont
 len_new = size(x_new)
@@ -1022,7 +1020,6 @@ do i = 1, (len_new-1)
 
 end do
 
-
 !------
 ! Reassign quadratic approximation slopes and original slopes to adjusted intervals
 do i = 2, (len-1)
@@ -1049,14 +1046,14 @@ do i = 2, (len-1)
 
 end do
 
-
 !---
 ! Ensure smooth monotonic interpolation between control points
-call monocheck(d_new, m_new)
 
+call monocheck(d_new, m_new)
 
 !------
 !Assign the daily value based on sequence
+
 n = 1
 k = 1
 
@@ -1110,11 +1107,10 @@ do i = 1, len !outer loop start, for all monthly intervals N
 
 end do !end of outer loop
 
-
 end subroutine newspline_bound
 
+! ------------------------------------------------------------------------------------------------------------------
 
-!-------------------------------------------------------------------------------
 subroutine newspline_pbound(monthdata,nk,daydata,plim)
 
 implicit none
@@ -1256,7 +1252,6 @@ do i = 1, (len+1)
 
 end do
 
-
 !------
 ! Calculate "second" wall control based on interception of Hermite functions
 
@@ -1274,7 +1269,6 @@ do i = 1, (len+1)
   swc(i) = (fmc(i) * H_00) + (m(i) * H_10) + (fmc(i+1) * H_01) + (m(i+1) * H_11)
 
 end do
-
 
 !------
 ! Compile the NxN linear matrix to adjust mid-control points
@@ -1302,7 +1296,6 @@ mat(1,2) = 0.5 * G_11
 mat(len,len-1) = -0.5 * G_10
 mat(len,len)   = 0.5 * G_10 + G_01 + G_00 - 0.5 * G_11 + 1.
 
-
 n = 1
 do i = 2, (len-1)
 
@@ -1318,20 +1311,21 @@ end do
 
 !---
 
-solution(1)   = 2. * monthdata(1) - swc(1) * G_00 - 0.5 * (swc(2) - swc(1)) * G_11 - 0.5 * (swc(2) - swc(1)) * G_10 - swc(2) * G_01 - swc(1) + 0.5 * G_10 * monthdata(1)
+solution(1) = 2. * monthdata(1) - swc(1) * G_00 - 0.5 * (swc(2) - swc(1)) * G_11 - 0.5 * (swc(2) - swc(1)) * G_10 - swc(2) *    &
+                G_01 - swc(1) + 0.5 * G_10 * monthdata(1)
 
-solution(len) =  2. * monthdata(len) - swc(len) * G_00 - 0.5 * (swc(len+1) - swc(len)) * G_11 - 0.5 * (swc(len+1) - swc(len)) * G_10 - swc(len+1) * G_01 - swc(len) - 0.5 * G_11 * monthdata(len)
-
+solution(len) =  2. * monthdata(len) - swc(len) * G_00 - 0.5 * (swc(len+1) - swc(len)) * G_11 - 0.5 * (swc(len+1) - swc(len)) *   &
+                   G_10 - swc(len+1) * G_01 - swc(len) - 0.5 * G_11 * monthdata(len)
 
 do i = 2, (len-1)
 
-  solution(i) = 2. * monthdata(i) - swc(i) * G_00 - 0.5 * (swc(i+1) - swc(i)) * G_11 - 0.5 * (swc(i+1) - swc(i)) * G_10 - swc(i+1) * G_01 - swc(i)
+  solution(i) = 2. * monthdata(i) - swc(i) * G_00 - 0.5 * (swc(i+1) - swc(i)) * G_11 - 0.5 * (swc(i+1) - swc(i)) *   &
+                 G_10 - swc(i+1) * G_01 - swc(i)
 
 end do
 
 ! Solve linear system to get final mid control points
 call matsol(mat,solution)
-
 
 !------
 ! Compile "second" wall control with newly adjusted mid control points (all_cont)
@@ -1359,13 +1353,11 @@ end do
 
 all_cont(size(all_cont)) = swc(size(swc))
 
-
 !------------------
 ! PART 2: Adjust monotonicty using the tridiagonal equation
 !------------------
 
 call mono_adjust(monthdata, all_cont)
-
 
 !------------------
 ! PART 3: Adjustment to maximum and minimum bound
@@ -1382,7 +1374,6 @@ osc_check = .FALSE.
 c2 = -9999.
 root = -9999.
 root_days = -9999
-
 
 !------
 ! Assign -1 for negative slope, 1 for postive and 0 for turning point
@@ -1412,7 +1403,6 @@ do i = 2, (len-1)
 
 end do
 
-
 !------
 ! Assign TRUE if oscillation of turning point exceeds the predetermined threshold
 perc = plim / 100.
@@ -1438,7 +1428,6 @@ do i = 2, (len-1)
   end if
 
 end do
-
 
 !------
 ! Calculate the amount of adjustment required and insert into the c2 variable
@@ -1478,9 +1467,9 @@ do i = 2, (len-1)
 
 end do
 
-
 !------
 ! Calculate the root deviation based on c2 and triangular approximation
+
 count = 0 ! Count the number of extra Hermite spline segments required
 
 do i = 2, (len-1)
@@ -1524,7 +1513,6 @@ do i = 2, (len-1)
 
       root_days(i) = l - 1
 
-
     else if (mod(nk(i),2) /= 0) then ! ODD month partitions
 
       u = 0.
@@ -1556,14 +1544,15 @@ do i = 2, (len-1)
 
 end do
 
-
 !------
 ! Re-estimate c2 based on integral area under Hermite spline
+
 do i = 1, (len-1)
 
   if(osc_check(i) ) then
 
     !--- Construct fourth degree Hermite at u = 1 (integral [0,1])
+    
     del = 1. - root(i)
 
     u = 1.
@@ -1574,16 +1563,19 @@ do i = 1, (len-1)
     G_11 = (u**3) * (3.*u - 4.) / 12.
 
     !--- Assign local control points
+    
     yi   = all_cont((2*i)-1)
     yi1  = monthdata(i)
     y2i  = monthdata(i)
     y2i1 = all_cont((2*i)+1)
 
     !--- Assign local slope
+    
     mi   = ((yi - all_cont((2*i)-2)) / 1. + (all_cont(2*i) - yi) / 1.) / 2.
     m2i1 = ((all_cont((2*i)+2) - y2i1) / 1. + (y2i1 - all_cont(2*i)) / 1.) / 2.
 
     !--- Calculate new area approximation based on Hermite intergral
+    
     area_total = 2. * del * monthdata(i)
 
     top = (G_00 * yi) + (G_10 * del * mi) + (G_01 * yi1) + (G_00 * y2i) + (G_01 * y2i1) + (G_11 * del * m2i1)
@@ -1592,15 +1584,16 @@ do i = 1, (len-1)
     area_int = (area_total - del * (top + yi + y2i)) / bot
 
     !--- Re-assign c2 as the integral-estimated value
+    
     c2(i) = (3. * area_int) / (4 * root(i))
 
   end if
 
 end do
 
-
 !------
 ! Generate x_new and y_new series that contains the extra quadratic adjusted segments
+
 allocate(x_new((2*len)+2+count))
 allocate(y_new((2*len)+2+count))
 
@@ -1652,9 +1645,9 @@ end do
 x_new(nn) = kk
 y_new(nn) = all_cont(mm)
 
-
 !------
 ! Construct the spline for daily values based on all_cont
+
 len_new = size(x_new)
 
 allocate(d_new(len_new-1))
@@ -1674,6 +1667,7 @@ do i = 2, (len_new-1)
 
   !---
   ! Monotonic adjustment to slope
+  
   if(d_new(i-1) > 0 .and. d_new(i) < 0) then
 
     m_new(i) = 0
@@ -1704,6 +1698,7 @@ end do
 
 !------
 ! Reassign quadratic approximation slopes and original slopes to adjusted intervals
+
 do i = 2, (len-1)
 
   if (osc_check(i) ) then
@@ -1735,7 +1730,6 @@ end do
 !---
 ! Ensure smooth monotonic interpolation between control points
 call monocheck(d_new, m_new)
-
 
 !------
 !Assign the daily value based on sequence
@@ -1796,8 +1790,8 @@ end do !end of outer loop
 
 end subroutine newspline_pbound
 
+! ------------------------------------------------------------------------------------------------------------------
 
-!-------------------------------------------------------------------------------
 subroutine newspline_bound_all(monthdata,nk,daydata,llim,ulim,plim)
 
 implicit none
@@ -1880,7 +1874,6 @@ real(sp), dimension(:), allocatable :: y_new
 real(sp)    :: kk
 integer(i4) :: nn, mm
 
-
 !------------------
 ! PART 1: Determine all wall and mid control points
 !------------------
@@ -1929,7 +1922,6 @@ end do
 m(1)     = d(1)
 m(len+2) = d(len+1)
 
-
 do i = 1, (len+1)
 
   if(d(i) == 0) then
@@ -1940,7 +1932,6 @@ do i = 1, (len+1)
   end if
 
 end do
-
 
 !------
 ! Calculate "second" wall control based on interception of Hermite functions
@@ -1958,7 +1949,6 @@ do i = 1, (len+1)
   swc(i) = (fmc(i) * H_00) + (m(i) * H_10) + (fmc(i+1) * H_01) + (m(i+1) * H_11)
 
 end do
-
 
 !------
 ! Compile the NxN linear matrix to adjust mid-control points
@@ -2014,7 +2004,6 @@ end do
 ! Solve linear system to get final mid control points
 call matsol(mat, solution)
 
-
 !------
 ! Compile "second" wall control with newly adjusted mid control points (all_cont)
 
@@ -2041,13 +2030,11 @@ end do
 
 all_cont(size(all_cont)) = swc(size(swc))
 
-
 !------------------
 ! PART 2: Adjust monotonicty using the tridiagonal equation
 !------------------
 
 call mono_adjust(monthdata, all_cont)
-
 
 !------------------
 ! PART 3: Adjustment to maximum and minimum bound
@@ -2177,7 +2164,6 @@ do i = 2, (len-1)
 
 end do
 
-
 !------
 ! Calculate the root deviation based on c2 and triangular approximation
 count = 0 ! Count the number of extra Hermite spline segments required
@@ -2252,7 +2238,6 @@ do i = 2, (len-1)
 
 end do
 
-
 !------
 ! Re-estimate c2 based on integral area under Hermite spline
 do i = 1, (len-1)
@@ -2293,7 +2278,6 @@ do i = 1, (len-1)
   end if
 
 end do
-
 
 !------
 ! Generate x_new and y_new series that contains the extra quadratic adjusted segments
@@ -2348,7 +2332,6 @@ end do
 x_new(nn) = kk
 y_new(nn) = all_cont(mm)
 
-
 !------
 ! Construct the spline for daily values based on all_cont
 len_new = size(x_new)
@@ -2398,7 +2381,6 @@ do i = 1, (len_new-1)
 
 end do
 
-
 !------
 ! Reassign quadratic approximation slopes and original slopes to adjusted intervals
 
@@ -2429,7 +2411,6 @@ end do
 !---
 ! Ensure smooth monotonic interpolation between control points
 call monocheck(d_new, m_new)
-
 
 !------
 !Assign the daily value based on sequence
@@ -2488,8 +2469,8 @@ end do !end of outer loop
 
 end subroutine newspline_bound_all
 
+! ------------------------------------------------------------------------------------------------------------------
 
-!-------------------------------------------------------------------------------
 subroutine monocheck(d,m)
 
 implicit none
@@ -2560,8 +2541,8 @@ end do
 
 end subroutine monocheck
 
+! ------------------------------------------------------------------------------------------------------------------
 
-!-------------------------------------------------------------------------------
 subroutine mono_adjust(monthdata, all_cont)
 
 implicit none
@@ -2733,8 +2714,8 @@ end do
 
 end subroutine mono_adjust
 
+! ------------------------------------------------------------------------------------------------------------------
 
-!-------------------------------------------------------------------------------
 subroutine days_even(nk,y_val,m_val,daydata)
 
 implicit none
@@ -2795,8 +2776,8 @@ end do
 
 end subroutine days_even
 
+! ------------------------------------------------------------------------------------------------------------------
 
-!-------------------------------------------------------------------------------
 subroutine days_odd(nk,y_val,m_val,daydata)
 
 implicit none
@@ -2857,8 +2838,8 @@ end do
 
 end subroutine days_odd
 
+! ------------------------------------------------------------------------------------------------------------------
 
-!-------------------------------------------------------------------------------
 subroutine days_osc_even(nk,root_days,root,y_val,m_val,daydata)
 
 implicit none
@@ -2895,7 +2876,6 @@ del = 1 - root
 a = del - ((real(day_outsd) * 2. - 1.) / real(nk))
 
 b = root - ((real(day_insd) * 2. - 1.) / real(nk))
-
 
 !------
 ! Start with days outside quadratic partition on LEFT interval
@@ -2990,8 +2970,8 @@ end do
 
 end subroutine days_osc_even
 
+! ------------------------------------------------------------------------------------------------------------------
 
-!-------------------------------------------------------------------------------
 subroutine days_osc_odd(nk,root_days,root,y_val,m_val,daydata)
 
 implicit none
@@ -3014,7 +2994,6 @@ real(sp) :: del
 real(sp) :: a,b
 real(sp) :: u
 
-
 !------
 ! LEFT INTERVAL (to the midpoint)
 day_insd = root_days !+ 1
@@ -3028,7 +3007,6 @@ del = 1. - root
 a = del - ((real(day_outsd) * 2. - 1.) / real(nk))
 
 b = root - ((real(day_insd) * 2. - 2.) / real(nk))
-
 
 !------
 ! Start with days outside quadratic partition on LEFT interval
@@ -3074,7 +3052,6 @@ do i = 1, day_insd
 
 end do
 
-
 !------
 ! RIGHT INTERVAL (to the midpoint)
 day_insd = root_days - 1
@@ -3086,7 +3063,6 @@ day_outsd = ((nk-1) / 2) - day_insd
 a = root - ((real(day_insd) * 2.) / real(nk))
 
 b = del - ((real(day_outsd) * 2. - 1.) / real(nk))
-
 
 ! Days inside quadratic partition on RIGHT interval
 num = (2 * day_insd)
@@ -3107,7 +3083,6 @@ do i = 1, day_insd
   n = n + 1
 
 end do
-
 
 !---
 ! Days outside the quadratic partition on RIGHT interval
@@ -3132,5 +3107,6 @@ end do
 
 end subroutine days_osc_odd
 
+! ------------------------------------------------------------------------------------------------------------------
 
 end module newsplinemod
