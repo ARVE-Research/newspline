@@ -1,6 +1,6 @@
 module utilitiesmod
 
-use parametersmod, only : sp,dp
+use parametersmod, only : i4,sp
 
 implicit none
 
