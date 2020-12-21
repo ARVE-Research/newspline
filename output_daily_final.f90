@@ -12,7 +12,7 @@ integer(i4),  dimension(38) :: nk
 real(sp), dimension(38)             :: temp
 real(sp), dimension(:), allocatable :: daydata
 
-integer(i4)  :: summ, i, j, n
+integer(i4)  :: i, summ
 character(6) :: header
 
 !------

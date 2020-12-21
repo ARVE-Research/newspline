@@ -24,7 +24,6 @@ real(sp), dimension(:)  , intent(inout) :: sol
 
 integer(i4), dimension(size(sol)) :: indx
 real(sp)   , dimension(size(sol)) :: mv
-real(sp)   , dimension(size(sol)) :: tmp
 real(sp)   , dimension(:,:), allocatable   :: prod
 integer(i4), dimension(1)   :: maxl
 
@@ -121,7 +120,7 @@ real(sp),               intent(in)  :: x
 integer(i4),            intent(out) :: loc
 
 real(sp), dimension(:), allocatable :: diff
-integer(i4) :: i,len
+integer(i4) :: len
 
 !----
 

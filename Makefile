@@ -1,14 +1,14 @@
 # makefile for spline interpolation comparisons and timing (Lai & Kaplan, 2020)
 
 FC=gfortran
-FCFLAGS  = -Wall -pedantic
+FCFLAGS  = -Wall -pedantic -O3
 
 #---------------------------------------------
 
 OBJS = parametersmod.o			\
-			 utilitiesmod.o    		\
-			 newsplinemod.o				\
-       output_daily_final.o
+			utilitiesmod.o				\
+			newsplinemod.o				\
+			output_daily_final.o
 
 .SUFFIXES: .o .f90 .f .mod
 

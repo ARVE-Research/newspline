@@ -171,7 +171,7 @@ real(sp) :: G_00
 real(sp) :: G_01
 real(sp) :: G_10
 real(sp) :: G_11
-real(sp) :: u,z
+real(sp) :: u
 
 integer(i4) :: len, len_cont
 integer(i4) :: i, j, k, n
@@ -487,7 +487,7 @@ real(sp), dimension(:),   allocatable :: solution
 real(sp), dimension(:),   allocatable :: all_solution
 
 integer(i4) :: len
-integer(i4) :: i, j, n
+integer(i4) :: i, n
 
 ! Final vector of all control points
 real(sp), dimension(:), allocatable :: all_cont
@@ -498,7 +498,7 @@ real(sp) :: H_01
 real(sp) :: H_10
 real(sp) :: H_11
 
-real(sp)    :: u, z
+real(sp)    :: u
 integer(i4) :: l
 
 ! Local variables for generating daily values after minmax bound adjustment of all_cont
@@ -1134,7 +1134,7 @@ real(sp), dimension(:),   allocatable :: solution
 real(sp), dimension(:),   allocatable :: all_solution
 
 integer(i4) :: len
-integer(i4) :: i, j, n
+integer(i4) :: i, n
 
 ! Hermite cubic spline basis functions
 real(sp)     :: H_00
@@ -1142,7 +1142,7 @@ real(sp)     :: H_01
 real(sp)     :: H_10
 real(sp)     :: H_11
 
-real(sp)     :: u,z
+real(sp)     :: u
 integer(i4) :: l
 
 ! Final vector of all control points
@@ -1552,7 +1552,7 @@ do i = 1, (len-1)
   if(osc_check(i) ) then
 
     !--- Construct fourth degree Hermite at u = 1 (integral [0,1])
-    
+
     del = 1. - root(i)
 
     u = 1.
@@ -1563,19 +1563,19 @@ do i = 1, (len-1)
     G_11 = (u**3) * (3.*u - 4.) / 12.
 
     !--- Assign local control points
-    
+
     yi   = all_cont((2*i)-1)
     yi1  = monthdata(i)
     y2i  = monthdata(i)
     y2i1 = all_cont((2*i)+1)
 
     !--- Assign local slope
-    
+
     mi   = ((yi - all_cont((2*i)-2)) / 1. + (all_cont(2*i) - yi) / 1.) / 2.
     m2i1 = ((all_cont((2*i)+2) - y2i1) / 1. + (y2i1 - all_cont(2*i)) / 1.) / 2.
 
     !--- Calculate new area approximation based on Hermite intergral
-    
+
     area_total = 2. * del * monthdata(i)
 
     top = (G_00 * yi) + (G_10 * del * mi) + (G_01 * yi1) + (G_00 * y2i) + (G_01 * y2i1) + (G_11 * del * m2i1)
@@ -1584,7 +1584,7 @@ do i = 1, (len-1)
     area_int = (area_total - del * (top + yi + y2i)) / bot
 
     !--- Re-assign c2 as the integral-estimated value
-    
+
     c2(i) = (3. * area_int) / (4 * root(i))
 
   end if
@@ -1667,7 +1667,7 @@ do i = 2, (len_new-1)
 
   !---
   ! Monotonic adjustment to slope
-  
+
   if(d_new(i-1) > 0 .and. d_new(i) < 0) then
 
     m_new(i) = 0
@@ -1819,7 +1819,7 @@ real(sp),    dimension(:),   allocatable :: solution
 real(sp),    dimension(:),   allocatable :: all_solution
 
 integer(i4) :: len
-integer(i4) :: i,j,n
+integer(i4) :: i,n
 
 ! Final vector of all control points
 real(sp), dimension(:), allocatable :: all_cont
@@ -1829,7 +1829,7 @@ real(sp) :: H_00
 real(sp) :: H_01
 real(sp) :: H_10
 real(sp) :: H_11
-real(sp) :: u,z
+real(sp) :: u
 
 integer(i4) :: l
 
@@ -2224,7 +2224,7 @@ do i = 2, (len-1)
 
     else if (mod(nk(i),2) /= 0) then ! ODD month partitions
 
-      u = 0. !1. / (real(nk(i)))
+      u = 0.
 
       root_adj = 9999.
 
@@ -2257,7 +2257,7 @@ do i = 1, (len-1)
   if(osc_check(i) ) then
 
     !--- Construct fourth degree Hermite at u = 1 (integral [0,1])
-    
+
     del = 1 - root(i)
 
     u = 1.
@@ -2268,19 +2268,19 @@ do i = 1, (len-1)
     G_11 = (u**3) * (3.*u - 4.) / 12.
 
     !--- Assign local control points
-    
+
     yi   = all_cont((2*i)-1)
     yi1  = monthdata(i)
     y2i  = monthdata(i)
     y2i1 = all_cont((2*i)+1)
 
     !--- Assign local slope
-    
+
     mi   = ((yi - all_cont((2*i)-2)) / 1. + (all_cont(2*i) - yi) / 1.) / 2.
     m2i1 = ((all_cont((2*i)+2) - y2i1) / 1. + (y2i1 - all_cont(2*i)) / 1.) / 2.
 
     !--- Calculate new area approximation based on Hermite intergral
-    
+
     area_total = 2. * del * monthdata(i)
 
     top = (G_00 * yi) + (G_10 * del * mi) + (G_01 * yi1) + (G_00 * y2i) + (G_01 * y2i1) + (G_11 * del * m2i1)
@@ -2289,7 +2289,7 @@ do i = 1, (len-1)
     area_int = (area_total - del * (top + yi + y2i)) / bot
 
     !--- Re-assign c2 as the integral-estimated value
-    
+
     c2(i) = (3. * area_int) / (4. * root(i))
 
   end if
@@ -2372,7 +2372,7 @@ do i = 2, (len_new-1)
 
   !---
   ! Monotonic adjustment to slope
-  
+
   if(d_new(i-1) > 0 .and. d_new(i) < 0) then
 
     m_new(i) = 0
@@ -2688,7 +2688,7 @@ do i = 2, (len-1)
 
       s_sol(1) = 2. * monthdata(i) - (G_00 - 0.5 * G_10 - 0.5 * G_11 + 1) * all_cont(2*i-1) + 0.5 * G_10 * all_cont(2*i-2) -   &
                   (G_00 + G_01 + 0.5 * G_10 - 0.5 * G_11 + 1.) * all_cont(2*i)
-      
+
       s_sol(2) = 2. * monthdata(i+1) - (G_01 + 0.5 * G_10 + 0.5 * G_11) * all_cont(2*i+3) + 0.5 * G_10 * all_cont(2*i) -   &
                    0.5 * G_11 * all_cont(2*i+4)
 
@@ -2756,7 +2756,6 @@ real(sp),    dimension(:), intent(in)    :: y_val, m_val ! Take in three control
 real(sp),    dimension(:), intent(inout) :: daydata
 
 ! Local variable for generating day fraction from [0,1] for Hermite curve
-integer(i4) :: int_len ! Interval lenght (no. of days)
 integer(i4) :: i,n
 
 real(sp) :: H_00
