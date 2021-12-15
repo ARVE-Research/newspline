@@ -1,5 +1,7 @@
 module newsplinemod
 
+  ! This is OLD CODE, need updating
+
 ! this is newspline, a fast, means-preserving spline for interval data
 ! Leo O Lai and Jed O. Kaplan
 ! 2020
