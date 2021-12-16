@@ -1,6 +1,6 @@
 module newsplinemod
 
-! this is newspline, a fast, means-preserving spline for interval data (v2.0)
+! This is newspline, a fast, means-preserving spline for interval data
 ! Leo O Lai and Jed O. Kaplan
 ! 2021
 
@@ -9,7 +9,7 @@ use utilitiesmod,  only : matsol,findloc
 
 implicit none
 
-public  :: newspline       ! Newspline subroutine with all optional bounded adjustment schemes (version 2.0)
+public  :: newspline          ! Newspline subroutine with all optional bounded adjustment schemes (version 2.0)
 
 private :: alim_adjust        ! Bounded interpolation adjustment scheme for absolute limit (i.e., bound tolerance)
 private :: plim_adjust        ! Bounded interpolation adjustmnet scheme for percentage limit (relative to each interval individually)
@@ -22,33 +22,31 @@ contains
 !------------------------------------------------------------------------------------------------------------------
 !------------------------------------------------------------------------------------------------------------------
 
-subroutine newspline(monthdata,nk,daydata,alim,llim,ulim,plim,n_adjust)
+subroutine newspline(monthdata,nk,bcond,daydata,alim,llim,ulim,plim)
 
 implicit none
 
 ! Input variables
 real(sp),    dimension(:), intent(in)  :: monthdata          ! Array of (monthly) interval data
 integer(i4), dimension(:), intent(in)  :: nk                 ! Array of number of small time-steps for each interval (can be variable)
+real(sp),    dimension(2), intent(in)  :: bcond              ! Boundary condition array, bcond(1) = bcond of first interval and bcond(2) = bcond of last interval
 real(sp),    dimension(:), intent(out) :: daydata            ! Array of interpolated values (dimension must be equal to sum of nk)
-real(sp),    optional    , intent(in)  :: alim               ! Absolute limit for bounded interpolation
-real(sp),    optional    , intent(in)  :: llim               ! Minimum limit for bounded interpolation
-real(sp),    optional    , intent(in)  :: ulim               ! Maximum limit for bounded interpolation
-real(sp),    optional    , intent(in)  :: plim               ! Percetnage limit for bounded interpolation
-integer(i4), optional    , intent(out) :: n_adjust           ! Number of adjusted intervals after bounded adjustment
+real(sp),    optional    , intent(in)  :: alim               ! OPTIONAL :: Absolute limit for bounded interpolation
+real(sp),    optional    , intent(in)  :: llim               ! OPTIONAL :: Minimum limit for bounded interpolation
+real(sp),    optional    , intent(in)  :: ulim               ! OPTIONAL :: Maximum limit for bounded interpolation
+real(sp),    optional    , intent(in)  :: plim               ! OPTIONAL :: Percetnage limit for bounded interpolation
 
 ! Local variables for wall control points
-real(sp), dimension(:), allocatable :: swc
+real(sp), dimension(:), allocatable :: wcp
 
 ! Local variables for linear system of mid control adjustments
 real(sp),    dimension(:,:), allocatable :: mat
 real(sp),    dimension(:),   allocatable :: solution
-real(sp),    dimension(:),   allocatable :: all_solution
 
 ! Final vector of all control points
 real(sp), dimension(:), allocatable :: all_cont
 
 ! Local variables for generating daily values
-real(sp), dimension(:), allocatable :: d_cont
 real(sp), dimension(:), allocatable :: m_cont
 
 ! Hermite cubic and quartic spline basis functions
@@ -75,15 +73,16 @@ len = size(monthdata)
 !
 ! New possible simplified method upon revision by Leo O Lai (Sep 2021)
 ! Since we assume the interval width to be arbitary 1 unit, the wall-CPs are simply the average of yi and yi+1
+! First and last interval wall-CP (i.e. wcp(1) and wcp(N+1)) are determined by user specified boundary conditions
 
-allocate(swc(len+1))
+allocate(wcp(len+1))
 
-swc(1) = monthdata(1)
-swc(len+1) = monthdata(len)
+wcp(1)     = (monthdata(1) + bcond(1)) / 2.
+wcp(len+1) = (monthdata(len) + bcond(2)) / 2.
 
 do i = 2, len
 
-  swc(i) = (monthdata(i-1) + monthdata(i)) / 2
+  wcp(i) = (monthdata(i-1) + monthdata(i)) / 2
 
 end do
 
@@ -138,23 +137,23 @@ end do
 !---
 
 solution(1)   = 2 * monthdata(1) - &
-                (G_00 - 0.5 * G_10 - 0.5 * G_11) * swc(1) - &
-                (G_01 + 0.5 * G_10 + 0.5 * G_11) * swc(2)
+                (G_00 - 0.5 * G_10 - 0.5 * G_11) * wcp(1) - &
+                (G_01 + 0.5 * G_10 + 0.5 * G_11) * wcp(2)
 
-solution(1)   = solution(1) + 0.5 * G_10 * monthdata(1)
+solution(1)   = solution(1) + 0.5 * G_10 * bcond(1)
 
 solution(len) = 2 * monthdata(len) - &
-                (G_00 - 0.5 * G_10 - 0.5 * G_11) * swc(len) - &
-                (G_01 + 0.5 * G_10 + 0.5 * G_11) * swc(len+1)
+                (G_00 - 0.5 * G_10 - 0.5 * G_11) * wcp(len) - &
+                (G_01 + 0.5 * G_10 + 0.5 * G_11) * wcp(len+1)
 
-solution(len) = solution(len) - 0.5 * G_11 * monthdata(len)
+solution(len) = solution(len) - 0.5 * G_11 * bcond(2)
 
 
 do i = 2, (len-1)
 
   solution(i) = 2 * monthdata(i) - &
-                (G_00 - 0.5 * G_10 - 0.5 * G_11) * swc(i) - &
-                (G_01 + 0.5 * G_10 + 0.5 * G_11) * swc(i+1)
+                (G_00 - 0.5 * G_10 - 0.5 * G_11) * wcp(i) - &
+                (G_01 + 0.5 * G_10 + 0.5 * G_11) * wcp(i+1)
 
 end do
 
@@ -166,27 +165,19 @@ call matsol(mat, solution)
 
 !-------------------------------------------------------------------------------
 ! Compile wall control with newly adjusted mid control points (all_cont)
-allocate(all_solution(len+2))
-
-all_solution(1)       = monthdata(1)
-all_solution(2:len+1) = solution
-all_solution(len+2)   = monthdata(len)
-
-!---
-
-allocate(all_cont(size(swc)+size(all_solution)))
-
-all_cont(1) = all_solution(1)
+allocate(all_cont(size(wcp)+size(solution)))
 
 n = 1
-do i = 1, len+1
+do i = 1, len
 
-  all_cont(n)   = swc(i)
-  all_cont(n+1) = all_solution(i+1)
+  all_cont(n)   = wcp(i)
+  all_cont(n+1) = solution(i)
 
   n = n + 2
 
 end do
+
+all_cont(2*len+1) = wcp(len+1)
 
 
 !-------------------------------------------------------------------------------
@@ -194,40 +185,17 @@ end do
 
 len_cont = size(all_cont)
 
-allocate(d_cont(len_cont-1))
-allocate(m_cont(len_cont-2))
-
-do i = 1, (len_cont-1)
-
-  d_cont(i) = all_cont(i+1) - all_cont(i)
-
-end do
-
 !---
+! Calculate the slope for each control point
 
-do i = 1, (len_cont-2)
+allocate(m_cont(len_cont))
 
-  m_cont(i) = (d_cont(i) + d_cont(i+1))
+m_cont(1)        = all_cont(2) - bcond(1)
+m_cont(len_cont) = bcond(2) - all_cont(len_cont-1)
 
-end do
+do i = 2, len_cont-1
 
-
-do i = 2, (len_cont-3)
-
-  if(d_cont(i) == 0) then
-
-    m_cont(i)   = 0.
-    m_cont(i+1) = 0.
-
-  end if
-
-end do
-
-! ---
-
-do i = 1, (len_cont-1)
-
-  d_cont(i) = all_cont(i+1) - all_cont(i)
+  m_cont(i) = all_cont(i+1) - all_cont(i-1)
 
 end do
 
@@ -242,7 +210,7 @@ end do
 del = 0.5
 
 n = 1
-k = 0
+k = 1
 
 do i = 1, len ! Outer loop start, for all monthly intervals N
 
@@ -257,7 +225,7 @@ do i = 1, len ! Outer loop start, for all monthly intervals N
       H_10 = u * (u - 1) * (u - 1)
       H_11 = (u**2) * (u - 1)
 
-      daydata(n) = all_cont(k+1) * H_00 + del * m_cont(k) * H_10 + all_cont(k+2) * H_01 + del * m_cont(k+1) * H_11
+      daydata(n) = all_cont(k) * H_00 + del * m_cont(k) * H_10 + all_cont(k+1) * H_01 + del * m_cont(k+1) * H_11
 
       u = u + (2. / nk(i))
 
@@ -276,7 +244,7 @@ do i = 1, len ! Outer loop start, for all monthly intervals N
       H_10 = u * (u - 1) * (u - 1)
       H_11 = (u**2) * (u - 1)
 
-      daydata(n) = all_cont(k+2) * H_00 + del * m_cont(k+1) * H_10 + all_cont(k+3) * H_01 + del * m_cont(k+2) * H_11
+      daydata(n) = all_cont(k+1) * H_00 + del * m_cont(k+1) * H_10 + all_cont(k+2) * H_01 + del * m_cont(k+2) * H_11
 
       u = u + (2. / nk(i))
 
@@ -295,7 +263,7 @@ do i = 1, len ! Outer loop start, for all monthly intervals N
       H_10 = u * (u - 1) * (u - 1)
       H_11 = (u**2) * (u - 1)
 
-      daydata(n) = all_cont(k+1) * H_00 + del * m_cont(k) * H_10 + all_cont(k+2) * H_01 + del * m_cont(k+1) * H_11
+      daydata(n) = all_cont(k) * H_00 + del * m_cont(k) * H_10 + all_cont(k+1) * H_01 + del * m_cont(k+1) * H_11
 
       u = u + (2. / nk(i))
 
@@ -314,7 +282,7 @@ do i = 1, len ! Outer loop start, for all monthly intervals N
       H_10 = u * (u - 1) * (u - 1)
       H_11 = (u**2) * (u - 1)
 
-      daydata(n) = all_cont(k+2) * H_00 + del * m_cont(k+1) * H_10 + all_cont(k+3) * H_01 + del * m_cont(k+2) * H_11
+      daydata(n) = all_cont(k+1) * H_00 + del * m_cont(k+1) * H_10 + all_cont(k+2) * H_01 + del * m_cont(k+2) * H_11
 
       u = u + (2. / nk(i))
 
@@ -332,10 +300,10 @@ end do ! End of outer loop
 !-------------------------------------------------------------------------------
 ! Call bounded interpolation adjustment scheme if optional arguments are present
 
-if (present(llim)) call llim_adjust(llim,monthdata,nk,all_cont,daydata)
-if (present(ulim)) call ulim_adjust(ulim,monthdata,nk,all_cont,daydata)
-if (present(alim)) call alim_adjust(alim,monthdata,nk,all_cont,daydata,n_adjust)
-if (present(plim)) call plim_adjust(plim,monthdata,nk,all_cont,daydata)
+if (present(llim)) call llim_adjust(llim,monthdata,nk,bcond,all_cont,daydata)
+if (present(ulim)) call ulim_adjust(ulim,monthdata,nk,bcond,all_cont,daydata)
+if (present(alim)) call alim_adjust(alim,monthdata,nk,bcond,all_cont,daydata)
+if (present(plim)) call plim_adjust(plim,monthdata,nk,bcond,all_cont,daydata)
 
 
 end subroutine newspline
@@ -347,14 +315,14 @@ end subroutine newspline
 !------------------------------------------------------------------------------------------------------------------
 !------------------------------------------------------------------------------------------------------------------
 
-subroutine alim_adjust(alim,monthdata,nk,all_cont,daydata,n_adjust)
+subroutine alim_adjust(alim,monthdata,nk,bcond,all_cont,daydata)
 
 real(sp),                  intent(in)    :: alim        ! Absolute limit (e.g., no interpolated value can exceed +/- 0.05 of original interval mean input)
 real(sp),    dimension(:), intent(in)    :: monthdata   ! Array of monthly (interval) input data
 integer(i4), dimension(:), intent(in)    :: nk          ! Array of number of small time-steps for each interval (can be variable)
+real(sp),    dimension(:), intent(in)    :: bcond       ! Boundary condition array
 real(sp),    dimension(:), intent(in)    :: all_cont    ! Array of all control points (wall-CPs and mid-CPs)
 real(sp),    dimension(:), intent(inout) :: daydata     ! Array of daily intepolated values
-integer(i4),               intent(inout) :: n_adjust    ! Number of adjusted intervals after bounded adjustment
 
 
 real(sp), allocatable, dimension(:) :: d_orig           ! Slope direction of the current interval (1 = positive, -1 = negative, 0 = local maxima/minima)
@@ -362,16 +330,22 @@ logical,  allocatable, dimension(:) :: osc_check        ! TRUE if interval requi
 real(sp), allocatable, dimension(:) :: c2               ! Array to store the amount of adjustment required
 real(sp), allocatable, dimension(:) :: c_mon            ! Array to store current month (or interval) of values for bounded adjustment (dim = day in month)
 
+real(sp) :: perc
+
+real(sp) :: int_n
+real(sp) :: int_nm1
+real(sp) :: int_np1
+real(sp) :: sip12
+
 integer :: len
 integer :: i
 integer :: j
 integer :: k
-real(sp) :: perc
-
 integer :: srt
 integer :: end
 
 !-----
+
 len = size(monthdata)
 
 allocate(d_orig(len))
@@ -382,16 +356,31 @@ d_orig    = -9999.
 osc_check = .FALSE.
 c2        = -9999.
 
-
 !------
 ! Assign -1 for negative slope, 1 for postive and 0 for turning point
-do i = 2, (len-1)
+do i = 1, len
 
-  if ((monthdata(i+1) - monthdata(i)) < 0) then
+  ! Assign intervals values to local variables
+  int_n = monthdata(i)        ! Current interval
+
+  if (i == 1) then              ! If first interval, apply bcond(1)
+    int_nm1 = bcond(1)
+    int_np1 = monthdata(i+1)
+  else if (i == len) then       ! If last interval, apply bcond(2)
+    int_nm1 = monthdata(i-1)
+    int_np1 = bcond(2)
+  else
+    int_nm1 = monthdata(i-1)
+    int_np1 = monthdata(i+1)
+  end if
+
+  ! Determine the slope direction of the current interval relative to previous and next interval
+
+  if (int_np1 - int_n < 0) then
 
     d_orig(i) = -1
 
-  else if ((monthdata(i+1) - monthdata(i)) > 0) then
+  else if (int_np1 - int_n > 0) then
 
     d_orig(i) = 1
 
@@ -399,11 +388,11 @@ do i = 2, (len-1)
 
   !---
 
-  if (monthdata(i) > monthdata(i-1) .AND. monthdata(i) > monthdata(i+1)) then
+  if (int_n > int_nm1 .and. int_n > int_np1) then
 
     d_orig(i) = 0
 
-  else if (monthdata(i) < monthdata(i-1) .AND. monthdata(i) < monthdata(i+1)) then
+  else if (int_n < int_nm1 .and. int_n < int_np1) then
 
     d_orig(i) = 0
 
@@ -414,19 +403,23 @@ end do
 
 !------
 ! Assign TRUE if oscillation of turning point exceeds the predetermined threshold
-do i = 2, (len-1)
+do i = 1, len
+
+  ! Assign intervals values to variables
+  int_n = monthdata(i)        ! Current interval
+  sip12 = all_cont(2*i)       ! Position of interval mid-control point (i.e. si+1/2)
 
   if (d_orig(i) == 0) then
 
-    if (all_cont(2*i) > monthdata(i) + alim .OR. all_cont(2*i) < monthdata(i) - alim) then
+    if (sip12 > int_n + alim .OR. sip12 < int_n - alim) then
 
       osc_check(i) = .TRUE.
 
     end if
 
-  else if (d_orig(i) == 0 .AND. monthdata(i) < 0) then
+  else if (d_orig(i) == 0 .and. int_n < 0) then
 
-    if (all_cont(2*i) < (1.0+perc) * monthdata(i) .OR. all_cont(2*i) > (1.0-perc) * monthdata(i)) then
+    if (sip12 < (1.0+perc) * int_n .OR. sip12 > (1.0-perc) * int_n) then
 
       osc_check(i) = .TRUE.
 
@@ -441,17 +434,33 @@ end do
 ! Calculate the amount of adjustment required and insert into the c2 variable
 c2 = 0.
 
-do i = 2, (len-1)
+do i = 1, len
 
-  if (osc_check(i)  .AND. monthdata(i) > 0) then
+  ! Assign intervals values to local variables
+  int_n   = monthdata(i)        ! Current interval
+
+  if (i == 1) then              ! If first interval, apply bcond(1)
+    int_nm1 = bcond(1)
+    int_np1 = monthdata(i+1)
+  else if (i == len) then       ! If last interval, apply bcond(2)
+    int_nm1 = monthdata(i-1)
+    int_np1 = bcond(2)
+  else
+    int_nm1 = monthdata(i-1)
+    int_np1 = monthdata(i+1)
+  end if
+
+  !---
+
+  if (osc_check(i)  .and. int_n > 0) then
 
     !---
 
-    if (monthdata(i) > monthdata(i-1) .AND. monthdata(i) > monthdata(i+1)) then
+    if (int_n > int_nm1 .and. int_n > int_np1) then
 
       c2(i) = alim
 
-    else if (monthdata(i) < monthdata(i-1) .AND. monthdata(i) < monthdata(i+1)) then
+    else if (int_n < int_nm1 .and. int_n < int_np1) then
 
       c2(i) = -alim
 
@@ -459,15 +468,15 @@ do i = 2, (len-1)
 
     !---
 
-  else if (osc_check(i)  .AND. monthdata(i) < 0) then
+  else if (osc_check(i)  .and. int_n < 0) then
 
     !---
 
-    if (monthdata(i) > monthdata(i-1) .AND. monthdata(i) > monthdata(i+1)) then
+    if (int_n > int_nm1 .and. int_n > int_np1) then
 
       c2(i) = alim
 
-    else if (monthdata(i) < monthdata(i-1) .AND. monthdata(i) < monthdata(i+1)) then
+    else if (int_n < int_nm1 .and. int_n < int_np1) then
 
       c2(i) = -alim
 
@@ -482,32 +491,61 @@ end do
 
 !------
 ! Construct the spline for daily values based on all_cont
-do i = 2, (len-1)
+do i = 1, len
 
   if (osc_check(i)) then
 
-    srt = sum(nk(1:(i-1))) + 1
-    end = srt + nk(i) - 1
+    ! Assign intervals values to local variables
+    int_n = monthdata(i)        ! Current interval
+
+    if (i == 1) then              ! If first interval, apply bcond(1)
+      int_nm1 = bcond(1)
+      int_np1 = monthdata(i+1)
+    else if (i == len) then       ! If last interval, apply bcond(2)
+      int_nm1 = monthdata(i-1)
+      int_np1 = bcond(2)
+    else
+      int_nm1 = monthdata(i-1)
+      int_np1 = monthdata(i+1)
+    end if
 
     !---
 
+    if (i == 1) then
+      srt = 1
+      end = srt + nk(1) - 1
+    else
+      srt = sum(nk(1:(i-1))) + 1
+      end = srt + nk(i) - 1
+    end if
+
+    !---
+    ! Create seperate array of all the daily values within the interval being adjusted
     allocate(c_mon(nk(i)+2))
 
-    c_mon(1) = daydata(srt-1)
-
-    c_mon(2:nk(i)+1) = monthdata(i) + c2(i)
-
-    c_mon(nk(i)+2) = daydata(end+1)
+    if (i == 1) then
+      c_mon(1)         = all_cont(1)
+      c_mon(2:nk(i)+1) = int_n + c2(i)
+      c_mon(nk(i)+2)   = daydata(end+1)
+    else if (i == len) then
+      c_mon(1)         = daydata(srt-1)
+      c_mon(2:nk(i)+1) = int_n + c2(i)
+      c_mon(nk(i)+2)   = all_cont(2*len+1)
+    else
+      c_mon(1)         = daydata(srt-1)
+      c_mon(2:nk(i)+1) = int_n + c2(i)
+      c_mon(nk(i)+2)   = daydata(end+1)
+    end if
 
     !---
 
     do j = 1, 1000
 
-      if ((monthdata(i) > monthdata(i-1) .AND. monthdata(i) > monthdata(i+1)) .and. &
-          sum(c_mon(2:nk(i)+1)) / nk(i) - monthdata(i) < 0.01) exit
+      if ((int_n > int_nm1 .and. int_n > int_np1) .and. &
+          sum(c_mon(2:nk(i)+1)) / nk(i) - int_n < 0.01) exit
 
-      if ((monthdata(i) < monthdata(i-1) .AND. monthdata(i) < monthdata(i+1)) .and. &
-          sum(c_mon(2:nk(i)+1)) / nk(i) - monthdata(i) > 0.01) exit
+      if ((int_n < int_nm1 .and. int_n < int_np1) .and. &
+          sum(c_mon(2:nk(i)+1)) / nk(i) - int_n > 0.01) exit
 
 
       do k = 2, nk(i)+1
@@ -529,18 +567,19 @@ do i = 2, (len-1)
 end do
 
 
-n_adjust = count(osc_check)
+! n_adjust = count(osc_check)
 
 
 end subroutine alim_adjust
 
 !------------------------------------------------------------------------------------------------------------------
 
-subroutine plim_adjust(plim,monthdata,nk,all_cont,daydata)
+subroutine plim_adjust(plim,monthdata,nk,bcond,all_cont,daydata)
 
 real(sp),                  intent(in)    :: plim        ! Percentage limit (e.g. no interpolated value can exceed 5% of original interval mean input)
 real(sp),    dimension(:), intent(in)    :: monthdata   ! Array of monthly (interval) input data
 integer(i4), dimension(:), intent(in)    :: nk          ! Array of number of small time-steps for each interval (can be variable)
+real(sp),    dimension(:), intent(in)    :: bcond       ! Boundary condition array
 real(sp),    dimension(:), intent(in)    :: all_cont    ! Array of all control points (wall-CPs and mid-CPs)
 real(sp),    dimension(:), intent(inout) :: daydata     ! Array of daily intepolated values
 
@@ -550,17 +589,23 @@ logical,  allocatable, dimension(:) :: osc_check        ! TRUE if interval requi
 real(sp), allocatable, dimension(:) :: c2               ! Array to store the amount of adjustment required
 real(sp), allocatable, dimension(:) :: c_mon            ! Array to store current month (or interval) of values for bounded adjustment (dim = day in month)
 
+real(sp) :: perc
+
+real(sp) :: int_n
+real(sp) :: int_nm1
+real(sp) :: int_np1
+real(sp) :: sip12
+
 integer :: len
 integer :: i
 integer :: j
 integer :: k
-real(sp) :: perc
-
 integer :: srt
 integer :: end
 
 
 !-----
+
 len = size(monthdata)
 
 allocate(d_orig(len))
@@ -574,13 +619,29 @@ c2 = -9999.
 
 !------
 ! Assign -1 for negative slope, 1 for postive and 0 for turning point
-do i = 2, (len-1)
+do i = 1, len
 
-  if ((monthdata(i+1) - monthdata(i)) < 0) then
+  ! Assign intervals values to local variables
+  int_n   = monthdata(i)        ! Current interval
+
+  if (i == 1) then              ! If first interval, apply bcond(1)
+    int_nm1 = bcond(1)
+    int_np1 = monthdata(i+1)
+  else if (i == len) then       ! If last interval, apply bcond(2)
+    int_nm1 = monthdata(i-1)
+    int_np1 = bcond(2)
+  else
+    int_nm1 = monthdata(i-1)
+    int_np1 = monthdata(i+1)
+  end if
+
+  ! Determine the slope direction of the current interval relative to previous and next interval
+
+  if (int_np1 - int_n < 0) then
 
     d_orig(i) = -1
 
-  else if ((monthdata(i+1) - monthdata(i)) > 0) then
+  else if (int_np1 - int_n > 0) then
 
     d_orig(i) = 1
 
@@ -588,11 +649,11 @@ do i = 2, (len-1)
 
   !---
 
-  if (monthdata(i) > monthdata(i-1) .AND. monthdata(i) > monthdata(i+1)) then
+  if (int_n > int_nm1 .and. int_n > int_np1) then
 
     d_orig(i) = 0
 
-  else if (monthdata(i) < monthdata(i-1) .AND. monthdata(i) < monthdata(i+1)) then
+  else if (int_n < int_nm1 .and. int_n < int_np1) then
 
     d_orig(i) = 0
 
@@ -605,21 +666,25 @@ end do
 ! Assign TRUE if oscillation of turning point exceeds the predetermined threshold
 perc = plim / 100.
 
-do i = 2, (len-1)
+do i = 1, len
 
-  !j = 2 * i
+  ! Assign intervals values to variables
+  int_n = monthdata(i)        ! Current interval
+  sip12 = all_cont(2*i)       ! Position of interval mid-control point (i.e. si+1/2)
 
-  if (monthdata(i) > 0) then
+  !---
 
-    if (all_cont(2*i) > (1.0+perc) * monthdata(i) .OR. all_cont(2*i) < (1.0-perc) * monthdata(i)) then
+  if (d_orig(i) == 0 .and. monthdata(i) > 0) then
+
+    if (sip12 > (1.0+perc) * int_n .OR. sip12 < (1.0-perc) * int_n) then
 
       osc_check(i) = .TRUE.
 
     end if
 
-  else if (d_orig(i) == 0 .AND. monthdata(i) < 0) then
+  else if (d_orig(i) == 0 .and. int_n < 0) then
 
-    if (all_cont(2*i) < (1.0+perc) * monthdata(i) .OR. all_cont(2*i) > (1.0-perc) * monthdata(i)) then
+    if (sip12 < (1.0+perc) * int_n .OR. sip12 > (1.0-perc) * int_n) then
 
       osc_check(i) = .TRUE.
 
@@ -634,35 +699,51 @@ end do
 ! Calculate the amount of adjustment required and insert into the c2 variable
 c2 = 0.
 
-do i = 2, (len-1)
+do i = 1, len
 
-  if (osc_check(i)  .AND. monthdata(i) > 0) then
+  ! Assign intervals values to local variables
+  int_n   = monthdata(i)        ! Current interval
+
+  if (i == 1) then              ! If first interval, apply bcond(1)
+    int_nm1 = bcond(1)
+    int_np1 = monthdata(i+1)
+  else if (i == len) then       ! If last interval, apply bcond(2)
+    int_nm1 = monthdata(i-1)
+    int_np1 = bcond(2)
+  else
+    int_nm1 = monthdata(i-1)
+    int_np1 = monthdata(i+1)
+  end if
+
+  !---
+
+  if (osc_check(i)  .and. int_n > 0) then
 
     !---
 
-    if (monthdata(i) > monthdata(i-1) .AND. monthdata(i) > monthdata(i+1)) then
+    if (int_n > int_nm1 .and. int_n > int_np1) then
 
-      c2(i) = perc * monthdata(i)
+      c2(i) = perc * int_n
 
-    else if (monthdata(i) < monthdata(i-1) .AND. monthdata(i) < monthdata(i+1)) then
+    else if (int_n < int_nm1 .and. int_n < int_np1) then
 
-      c2(i) = -perc * monthdata(i)
+      c2(i) = -perc * int_n
 
     end if
 
     !---
 
-  else if (osc_check(i)  .AND. monthdata(i) < 0) then
+  else if (osc_check(i)  .and. int_n < 0) then
 
     !---
 
-    if (monthdata(i) > monthdata(i-1) .AND. monthdata(i) > monthdata(i+1)) then
+    if (int_n > int_nm1 .and. int_n > int_np1) then
 
-      c2(i) = -perc * monthdata(i)
+      c2(i) = -perc * int_n
 
-    else if (monthdata(i) < monthdata(i-1) .AND. monthdata(i) < monthdata(i+1)) then
+    else if (int_n < int_nm1 .and. int_n < int_np1) then
 
-      c2(i) = perc * monthdata(i)
+      c2(i) = perc * int_n
 
     end if
 
@@ -675,36 +756,61 @@ end do
 
 !------
 ! Construct the spline for daily values based on all_cont
-do i = 2, (len-1)
+do i = 1, len
 
   if (osc_check(i)) then
 
-    srt = sum(nk(1:(i-1))) + 1
-    end = srt + nk(i) - 1
+    ! Assign intervals values to local variables
+    int_n = monthdata(i)        ! Current interval
+
+    if (i == 1) then              ! If first interval, apply bcond(1)
+      int_nm1 = bcond(1)
+      int_np1 = monthdata(i+1)
+    else if (i == len) then       ! If last interval, apply bcond(2)
+      int_nm1 = monthdata(i-1)
+      int_np1 = bcond(2)
+    else
+      int_nm1 = monthdata(i-1)
+      int_np1 = monthdata(i+1)
+    end if
 
     !---
 
+    if (i == 1) then
+      srt = 1
+      end = srt + nk(1) - 1
+    else
+      srt = sum(nk(1:(i-1))) + 1
+      end = srt + nk(i) - 1
+    end if
+
+    !---
+    ! Create seperate array of all the daily values within the interval being adjusted
     allocate(c_mon(nk(i)+2))
 
-    ! c_mon(1) = all_cont(2*i-1)
-
-    c_mon(1) = daydata(srt-1)
-
-    c_mon(2:nk(i)+1) = monthdata(i) + c2(i)
-
-    ! c_mon(nk(i)+2) = all_cont(2*i+1)
-
-    c_mon(nk(i)+2) = daydata(end+1)
+    if (i == 1) then
+      c_mon(1)         = all_cont(1)
+      c_mon(2:nk(i)+1) = int_n + c2(i)
+      c_mon(nk(i)+2)   = daydata(end+1)
+    else if (i == len) then
+      c_mon(1)         = daydata(srt-1)
+      c_mon(2:nk(i)+1) = int_n + c2(i)
+      c_mon(nk(i)+2)   = all_cont(2*len+1)
+    else
+      c_mon(1)         = daydata(srt-1)
+      c_mon(2:nk(i)+1) = int_n + c2(i)
+      c_mon(nk(i)+2)   = daydata(end+1)
+    end if
 
     !---
 
     do j = 1, 1000
 
-      if ((monthdata(i) > monthdata(i-1) .AND. monthdata(i) > monthdata(i+1)) .and. &
-          sum(c_mon(2:nk(i)+1)) / nk(i) - monthdata(i) <= 0.0) exit
+      if ((int_n > int_nm1 .and. int_n > int_np1) .and. &
+          sum(c_mon(2:nk(i)+1)) / nk(i) - int_n < 0.01) exit
 
-      if ((monthdata(i) < monthdata(i-1) .AND. monthdata(i) < monthdata(i+1)) .and. &
-          sum(c_mon(2:nk(i)+1)) / nk(i) - monthdata(i) >= 0.0) exit
+      if ((int_n < int_nm1 .and. int_n < int_np1) .and. &
+          sum(c_mon(2:nk(i)+1)) / nk(i) - int_n > 0.01) exit
 
 
       do k = 2, nk(i)+1
@@ -730,11 +836,12 @@ end subroutine plim_adjust
 
 !------------------------------------------------------------------------------------------------------------------
 
-subroutine ulim_adjust(ulim,monthdata,nk,all_cont,daydata)
+subroutine ulim_adjust(ulim,monthdata,nk,bcond,all_cont,daydata)
 
 real(sp),                  intent(in)    :: ulim        ! Maximum limit (e.g. no interpolated value can exceed 1.0 in the ENTIRE interpolated series)
 real(sp),    dimension(:), intent(in)    :: monthdata   ! Array of monthly (interval) input data
 integer(i4), dimension(:), intent(in)    :: nk          ! Array of number of small time-steps for each interval (can be variable)
+real(sp),    dimension(:), intent(in)    :: bcond       ! Boundary condition array
 real(sp),    dimension(:), intent(in)    :: all_cont    ! Array of all control points (wall-CPs and mid-CPs)
 real(sp),    dimension(:), intent(inout) :: daydata     ! Array of daily intepolated values
 
@@ -744,16 +851,21 @@ logical,  allocatable, dimension(:) :: osc_check        ! TRUE if interval requi
 real(sp), allocatable, dimension(:) :: c2               ! Array to store the amount of adjustment required
 real(sp), allocatable, dimension(:) :: c_mon            ! Array to store current month (or interval) of values for bounded adjustment (dim = day in month)
 
+real(sp) :: int_n
+real(sp) :: int_nm1
+real(sp) :: int_np1
+real(sp) :: sip12
+
 integer :: len
 integer :: i
 integer :: j
 integer :: k
-
 integer :: srt
 integer :: end
 
 
 !-----
+
 len = size(monthdata)
 
 allocate(d_orig(len))
@@ -767,13 +879,29 @@ c2 = -9999.
 
 !------
 ! Assign -1 for negative slope, 1 for postive and 0 for turning point
-do i = 2, (len-1)
+do i = 1, len
 
-  if ((monthdata(i+1) - monthdata(i)) < 0) then
+  ! Assign intervals values to local variables
+  int_n = monthdata(i)        ! Current interval
+
+  if (i == 1) then              ! If first interval, apply bcond(1)
+    int_nm1 = bcond(1)
+    int_np1 = monthdata(i+1)
+  else if (i == len) then       ! If last interval, apply bcond(2)
+    int_nm1 = monthdata(i-1)
+    int_np1 = bcond(2)
+  else
+    int_nm1 = monthdata(i-1)
+    int_np1 = monthdata(i+1)
+  end if
+
+  ! Determine the slope direction of the current interval relative to previous and next interval
+
+  if (int_np1 - int_n < 0) then
 
     d_orig(i) = -1
 
-  else if ((monthdata(i+1) - monthdata(i)) > 0) then
+  else if (int_np1 - int_n > 0) then
 
     d_orig(i) = 1
 
@@ -781,11 +909,11 @@ do i = 2, (len-1)
 
   !---
 
-  if (monthdata(i) > monthdata(i-1) .AND. monthdata(i) > monthdata(i+1)) then
+  if (int_n > int_nm1 .and. int_n > int_np1) then
 
     d_orig(i) = 0
 
-  else if (monthdata(i) < monthdata(i-1) .AND. monthdata(i) < monthdata(i+1)) then
+  else if (int_n < int_nm1 .and. int_n < int_np1) then
 
     d_orig(i) = 0
 
@@ -796,9 +924,11 @@ end do
 
 !------
 ! Assign TRUE if oscillation of turning point exceeds the predetermined threshold
-do i = 2, (len-1)
+do i = 1, len
 
-  if (all_cont(2*i) > ulim .and. d_orig(i) == 0) then
+  sip12 = all_cont(2*i)
+
+  if (sip12 > ulim .and. d_orig(i) == 0) then
 
     osc_check(i) = .TRUE.
 
@@ -811,7 +941,7 @@ end do
 ! Calculate the amount of adjustment required and insert into the c2 variable
 c2 = 0.
 
-do i = 2, (len-1)
+do i = 1, len
 
   if (osc_check(i)) then
 
@@ -824,36 +954,61 @@ end do
 
 !------
 ! Construct the spline for daily values based on all_cont
-do i = 2, (len-1)
+do i = 1, len
 
   if (osc_check(i)) then
 
-    srt = sum(nk(1:(i-1))) + 1
-    end = srt + nk(i) - 1
+    ! Assign intervals values to local variables
+    int_n = monthdata(i)        ! Current interval
+
+    if (i == 1) then              ! If first interval, apply bcond(1)
+      int_nm1 = bcond(1)
+      int_np1 = monthdata(i+1)
+    else if (i == len) then       ! If last interval, apply bcond(2)
+      int_nm1 = monthdata(i-1)
+      int_np1 = bcond(2)
+    else
+      int_nm1 = monthdata(i-1)
+      int_np1 = monthdata(i+1)
+    end if
 
     !---
 
+    if (i == 1) then
+      srt = 1
+      end = srt + nk(1) - 1
+    else
+      srt = sum(nk(1:(i-1))) + 1
+      end = srt + nk(i) - 1
+    end if
+
+    !---
+    ! Create seperate array of all the daily values within the interval being adjusted
     allocate(c_mon(nk(i)+2))
 
-    ! c_mon(1) = all_cont(2*i-1)
-
-    c_mon(1) = daydata(srt-1)
-
-    c_mon(2:nk(i)+1) = monthdata(i) + c2(i)
-
-    ! c_mon(nk(i)+2) = all_cont(2*i+1)
-
-    c_mon(nk(i)+2) = daydata(end+1)
+    if (i == 1) then
+      c_mon(1)         = all_cont(1)
+      c_mon(2:nk(i)+1) = int_n + c2(i)
+      c_mon(nk(i)+2)   = daydata(end+1)
+    else if (i == len) then
+      c_mon(1)         = daydata(srt-1)
+      c_mon(2:nk(i)+1) = int_n + c2(i)
+      c_mon(nk(i)+2)   = all_cont(2*len+1)
+    else
+      c_mon(1)         = daydata(srt-1)
+      c_mon(2:nk(i)+1) = int_n + c2(i)
+      c_mon(nk(i)+2)   = daydata(end+1)
+    end if
 
     !---
 
     do j = 1, 1000
 
-      if ((monthdata(i) > monthdata(i-1) .AND. monthdata(i) > monthdata(i+1)) &
-          .and. sum(c_mon(2:nk(i)+1)) / nk(i) - monthdata(i) < 0.01) exit
+      if ((int_n > int_nm1 .and. int_n > int_np1) .and. &
+          sum(c_mon(2:nk(i)+1)) / nk(i) - int_n < 0.01) exit
 
-      if ((monthdata(i) < monthdata(i-1) .AND. monthdata(i) < monthdata(i+1)) &
-          .and. sum(c_mon(2:nk(i)+1)) / nk(i) - monthdata(i) > 0.01) exit
+      if ((int_n < int_nm1 .and. int_n < int_np1) .and. &
+          sum(c_mon(2:nk(i)+1)) / nk(i) - int_n > 0.01) exit
 
 
       do k = 2, nk(i)+1
@@ -879,11 +1034,12 @@ end subroutine ulim_adjust
 
 !------------------------------------------------------------------------------------------------------------------
 
-subroutine llim_adjust(llim,monthdata,nk,all_cont,daydata)
+subroutine llim_adjust(llim,monthdata,nk,bcond,all_cont,daydata)
 
 real(sp),                  intent(in)    :: llim        ! Minimum limit (e.g. no interpolated value can exceed 1.0 in the ENTIRE interpolated series)
 real(sp),    dimension(:), intent(in)    :: monthdata   ! Array of monthly (interval) input data
 integer(i4), dimension(:), intent(in)    :: nk          ! Array of number of small time-steps for each interval (can be variable)
+real(sp),    dimension(:), intent(in)    :: bcond       ! Boundary condition array
 real(sp),    dimension(:), intent(in)    :: all_cont    ! Array of all control points (wall-CPs and mid-CPs)
 real(sp),    dimension(:), intent(inout) :: daydata     ! Array of daily intepolated values
 
@@ -893,16 +1049,21 @@ logical,  allocatable, dimension(:) :: osc_check        ! TRUE if interval requi
 real(sp), allocatable, dimension(:) :: c2               ! Array to store the amount of adjustment required
 real(sp), allocatable, dimension(:) :: c_mon            ! Array to store current month (or interval) of values for bounded adjustment (dim = day in month)
 
+real(sp) :: int_n
+real(sp) :: int_nm1
+real(sp) :: int_np1
+real(sp) :: sip12
+
 integer :: len
 integer :: i
 integer :: j
 integer :: k
-
 integer :: srt
 integer :: end
 
 
 !-----
+
 len = size(monthdata)
 
 allocate(d_orig(len))
@@ -916,13 +1077,29 @@ c2 = -9999.
 
 !------
 ! Assign -1 for negative slope, 1 for postive and 0 for turning point
-do i = 2, (len-1)
+do i = 1, len
 
-  if ((monthdata(i+1) - monthdata(i)) < 0) then
+  ! Assign intervals values to local variables
+  int_n = monthdata(i)        ! Current interval
+
+  if (i == 1) then              ! If first interval, apply bcond(1)
+    int_nm1 = bcond(1)
+    int_np1 = monthdata(i+1)
+  else if (i == len) then       ! If last interval, apply bcond(2)
+    int_nm1 = monthdata(i-1)
+    int_np1 = bcond(2)
+  else
+    int_nm1 = monthdata(i-1)
+    int_np1 = monthdata(i+1)
+  end if
+
+  ! Determine the slope direction of the current interval relative to previous and next interval
+
+  if (int_np1 - int_n < 0) then
 
     d_orig(i) = -1
 
-  else if ((monthdata(i+1) - monthdata(i)) > 0) then
+  else if (int_np1 - int_n > 0) then
 
     d_orig(i) = 1
 
@@ -930,11 +1107,11 @@ do i = 2, (len-1)
 
   !---
 
-  if (monthdata(i) > monthdata(i-1) .AND. monthdata(i) > monthdata(i+1)) then
+  if (int_n > int_nm1 .and. int_n > int_np1) then
 
     d_orig(i) = 0
 
-  else if (monthdata(i) < monthdata(i-1) .AND. monthdata(i) < monthdata(i+1)) then
+  else if (int_n < int_nm1 .and. int_n < int_np1) then
 
     d_orig(i) = 0
 
@@ -943,11 +1120,14 @@ do i = 2, (len-1)
 end do
 
 
+
 !------
 ! Assign TRUE if oscillation of turning point exceeds the predetermined threshold
-do i = 2, (len-1)
+do i = 1, len
 
-  if (all_cont(2*i) < llim .and. d_orig(i) == 0) then
+  sip12 = all_cont(2*i)
+
+  if (sip12 < llim .and. d_orig(i) == 0) then
 
     osc_check(i) = .TRUE.
 
@@ -960,7 +1140,7 @@ end do
 ! Calculate the amount of adjustment required and insert into the c2 variable
 c2 = 0.
 
-do i = 2, (len-1)
+do i = 1, len
 
   if (osc_check(i)) then
 
@@ -973,36 +1153,61 @@ end do
 
 !------
 ! Construct the spline for daily values based on all_cont
-do i = 2, (len-1)
+do i = 1, len
 
   if (osc_check(i)) then
 
-    srt = sum(nk(1:(i-1))) + 1
-    end = srt + nk(i) - 1
+    ! Assign intervals values to local variables
+    int_n = monthdata(i)        ! Current interval
+
+    if (i == 1) then              ! If first interval, apply bcond(1)
+      int_nm1 = bcond(1)
+      int_np1 = monthdata(i+1)
+    else if (i == len) then       ! If last interval, apply bcond(2)
+      int_nm1 = monthdata(i-1)
+      int_np1 = bcond(2)
+    else
+      int_nm1 = monthdata(i-1)
+      int_np1 = monthdata(i+1)
+    end if
 
     !---
 
+    if (i == 1) then
+      srt = 1
+      end = srt + nk(1) - 1
+    else
+      srt = sum(nk(1:(i-1))) + 1
+      end = srt + nk(i) - 1
+    end if
+
+    !---
+    ! Create seperate array of all the daily values within the interval being adjusted
     allocate(c_mon(nk(i)+2))
 
-    ! c_mon(1) = all_cont(2*i-1)
-
-    c_mon(1) = daydata(srt-1)
-
-    c_mon(2:nk(i)+1) = monthdata(i) + c2(i)
-
-    ! c_mon(nk(i)+2) = all_cont(2*i+1)
-
-    c_mon(nk(i)+2) = daydata(end+1)
+    if (i == 1) then
+      c_mon(1)         = all_cont(1)
+      c_mon(2:nk(i)+1) = int_n + c2(i)
+      c_mon(nk(i)+2)   = daydata(end+1)
+    else if (i == len) then
+      c_mon(1)         = daydata(srt-1)
+      c_mon(2:nk(i)+1) = int_n + c2(i)
+      c_mon(nk(i)+2)   = all_cont(2*len+1)
+    else
+      c_mon(1)         = daydata(srt-1)
+      c_mon(2:nk(i)+1) = int_n + c2(i)
+      c_mon(nk(i)+2)   = daydata(end+1)
+    end if
 
     !---
 
     do j = 1, 1000
 
-      if ((monthdata(i) > monthdata(i-1) .AND. monthdata(i) > monthdata(i+1)) &
-          .and. sum(c_mon(2:nk(i)+1)) / nk(i) - monthdata(i) < 0.01) exit
+      if ((int_n > int_nm1 .and. int_n > int_np1) .and. &
+          sum(c_mon(2:nk(i)+1)) / nk(i) - int_n < 0.01) exit
 
-      if ((monthdata(i) < monthdata(i-1) .AND. monthdata(i) < monthdata(i+1)) &
-          .and. sum(c_mon(2:nk(i)+1)) / nk(i) - monthdata(i) > 0.01) exit
+      if ((int_n < int_nm1 .and. int_n < int_np1) .and. &
+          sum(c_mon(2:nk(i)+1)) / nk(i) - int_n > 0.01) exit
 
 
       do k = 2, nk(i)+1
